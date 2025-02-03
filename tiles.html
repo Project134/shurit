@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Tiles</title>
+    <style>
+        .tile {
+            display: inline-block;
+            margin: 10px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            cursor: pointer;
+            text-align: center;
+            min-width: 100px;
+        }
+        .clicked {
+            background-color: lightgreen;
+        }
+    </style>
+</head>
+<body>
+    <div id="tiles-container">
+
+        <div class="tile" onclick="handleClick(this, 'https://www.linkedin.com/jobs/search/?sortBy=DD&&geoId=102713980&keywords=%22Analytics%22%20AND%20%22Manager%22')">
+            linkedin : Analytics and Manager + India
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.linkedin.com/jobs/search/?sortBy=DD&f_PP=105214831%2C106164952%2C106442238%2C104793846%2C104869687%2C105282602&keywords=%22Analytics%22%20AND%20%22Manager%22')">
+            linkedin : Analytics and Manager + Delhi + Bengaluru + Gurgaon + Noida + Mumbai
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.linkedin.com/jobs/search/?sortBy=DD&f_WT=2&geoId=102713980&keywords=%22Analytics%22%20AND%20%22Manager%22')">
+            linkedin : Analytics and Manager + Remote - India
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.linkedin.com/jobs/search/?sortBy=DD&&geoId=102713980&keywords=%22Business%20Analyst%22')">
+            linkedin : Business Analyst + India
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.linkedin.com/jobs/search/?sortBy=DD&f_PP=105214831%2C106164952%2C106442238%2C104793846%2C104869687%2C105282602&keywords=%22Business%20Analyst%22')">
+            linkedin : Business Analyst + Delhi + Bengaluru + Gurgaon + Noida + Mumbai
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.linkedin.com/jobs/search/?sortBy=DD&f_WT=2&geoId=102713980&keywords=%22Business%20Analyst%22')">
+            linkedin : Business Analyst + Remote - India
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analytics-jobs-SRCH_IL.0,5_IN115_KO6,15.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&&remoteWorkType=1')">
+            Glassdoor : Analytics + India + min rating = 3.5 + >5000 employees + All Seniority levels + Remote
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analytics-jobs-SRCH_IL.0,5_IN115_KO6,15.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=2851180')">
+            Glassdoor : Analytics + India + min rating = 3.5 + >5000 employees + All Seniority levels + Mumbai
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analytics-jobs-SRCH_IL.0,5_IN115_KO6,15.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=2921225')">
+            Glassdoor : Analytics + India + min rating = 3.5 + >5000 employees + All Seniority levels + Gurgaon
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analytics-jobs-SRCH_IL.0,5_IN115_KO6,15.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=4477468')">
+            Glassdoor : Analytics + India + min rating = 3.5 + >5000 employees + All Seniority levels + Noida
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analyst-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&&remoteWorkType=1')">
+            Glassdoor : Analyst + India + min rating = 3.5 + >5000 employees + All Seniority levels + Remote
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analyst-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=2851180')">
+            Glassdoor : Analyst + India + min rating = 3.5 + >5000 employees + All Seniority levels + Mumbai
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analyst-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=2921225')">
+            Glassdoor : Analyst + India + min rating = 3.5 + >5000 employees + All Seniority levels + Gurgaon
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-analyst-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=4477468')">
+            Glassdoor : Analyst + India + min rating = 3.5 + >5000 employees + All Seniority levels + Noida
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-pyspark-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&&remoteWorkType=1')">
+            Glassdoor : Pyspark + India + min rating = 3.5 + >5000 employees + All Seniority levels + Remote
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-pyspark-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=2851180')">
+            Glassdoor : Pyspark + India + min rating = 3.5 + >5000 employees + All Seniority levels + Mumbai
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-pyspark-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=2921225')">
+            Glassdoor : Pyspark + India + min rating = 3.5 + >5000 employees + All Seniority levels + Gurgaon
+        </div>
+
+        <div class="tile" onclick="handleClick(this, 'https://www.glassdoor.co.in/Job/india-pyspark-jobs-SRCH_IL.0,5_IN115_KO6,13.htm?minRating=3.5&sortBy=date_desc&employerSizes=5&seniorityType=all&cityId=4477468')">
+            Glassdoor : Pyspark + India + min rating = 3.5 + >5000 employees + All Seniority levels + Noida
+        </div>
+
+    </div>
+    <script>
+        function handleClick(tile, url) {
+            let clickedTiles = JSON.parse(localStorage.getItem('clickedTiles')) || [];
+            if (clickedTiles.includes(url)) {
+                // If already clicked, remove from clickedTiles and remove clicked class
+                clickedTiles = clickedTiles.filter(item => item !== url);
+                tile.classList.remove('clicked');
+            } else {
+                // If not clicked, add to clickedTiles and add clicked class
+                clickedTiles.push(url);
+                tile.classList.add('clicked');
+            }
+            localStorage.setItem('clickedTiles', JSON.stringify(clickedTiles));
+            window.open(url, '_blank');  // Open the URL in a new tab
+        }
+
+        // Mark previously clicked tiles
+        window.onload = function() {
+            let clickedTiles = JSON.parse(localStorage.getItem('clickedTiles')) || [];
+            let tiles = document.querySelectorAll('.tile');
+            tiles.forEach(tile => {
+                let url = tile.getAttribute('onclick').split("handleClick(this, '")[1].slice(0, -2);
+                if (clickedTiles.includes(url)) {
+                    tile.classList.add('clicked');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
