@@ -2,6 +2,31 @@
 # ## importing libraries
 
 # %%
+import subprocess
+import sys
+
+def import_or_install(package):
+    """Try to import a package; if not available, install it."""
+    try:
+        __import__(package)  # Try to import the package
+    except ImportError:
+        print(f"{package} not installed. Installing...")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
+        print(f"{package} has been installed.")
+    else:
+        print(f"{package} is already installed.")
+
+
+
+# %%
+import_or_install('numpy')
+import_or_install('selenium')
+import_or_install('bs4')
+import_or_install('requests')
+import_or_install('lxml')
+
+
+# %%
 import os 
 import numpy as np 
 from bs4 import BeautifulSoup 
@@ -162,7 +187,7 @@ def extract_tag_data_to_dict_and_df(ele):
 # setting url
 urls = read_json('naukri_urls')
 
-# urls = {'one':'https://www.naukri.com/pyspark-jobs?k=pyspark&jobAge=7&experience=26'}
+# urls = {'one':'https://www.naukri.com/pyspark-jobs?k=pyspark&jobAge=7&experience=24'}
 
 # current directory
 cwd = os.getcwd()+"/"
@@ -173,6 +198,11 @@ job1_password = input('Enter pwd for job_1')
 job2_name = input('Enter name for job_2')
 job2_password = input('Enter pwd for job_2')
 
+# job1_name = ''
+# job1_password = ''
+
+# job2_name = ''
+# job2_password = ''
 
 # %% [markdown]
 # ## open chrome and get jobs tiles from the url 
@@ -258,10 +288,12 @@ def create_job_1():
 
 # %%
 if os.path.exists(cwd+"job_1.json"):
-    job_1_ctime = os.path.getctime(cwd+"job_1.json")
-    job_1_cdate = datetime.datetime.fromtimestamp(job_1_ctime).date()
+    job_1_mtime = os.path.getmtime(cwd+"job_1.json")
+    job_1_mdate = datetime.datetime.fromtimestamp(job_1_mtime).date()
+    print(job_1_mdate)
+    print(datetime.date.today())
 
-    if not(job_1_cdate == datetime.date.today()):
+    if not(job_1_mdate == datetime.date.today()):
         create_job_1()
 else:
     create_job_1()
@@ -312,6 +344,7 @@ df_job_1 = df_job_1.drop_duplicates()
 # %%
 # df_job_1.to_excel(cwd+'job.xlsx',index=False)
 df_job_1.to_csv(cwd+'job_1.csv',index=False)
+print(f'total rows = {len(df_job_1)}')
 
 
 # %% [markdown]
@@ -357,7 +390,7 @@ for index,job_row in df_job_1.iterrows():
         count = 0
         tiles = read_json('job_2')
         print(f'Percentage of files processed = {index/jobs_to_be_processed:.1%}')
-        
+    print(f'{index} out of {jobs_to_be_processed} (done)')    
 
 driver.close()
 
@@ -525,10 +558,17 @@ df_job_3['location_score'] = df_job_3['job_location'].apply(location_score)
 
 df_job_3 = df_job_3.sort_values(by=['keyword_score','company_rating','location_score','easy_apply','company_name'], ascending=[False,False, True,False,True])
 df_job_3['display_text'] = df_job_3['keyword_score'].astype(str).str.cat(df_job_3['company_rating'].astype(str), sep=' | ',na_rep='NA').str.cat(df_job_3['salary'].astype(str), sep=' | ',na_rep = 'NA').str.cat(df_job_3['job_title'].astype(str), sep=' | ',na_rep = 'NA').str.cat(df_job_3['company_name'].astype(str), sep=' | ',na_rep = 'NA').str.cat(df_job_3['job_location'].astype(str),sep=' | ',na_rep = 'NA')
-
+df_job_3['category'] = "All"
 
 # %%
 df_job_3.to_csv(cwd+'job_3.csv',index=False)
+
+# %%
+df_job_3.rename(columns={'job_url':'url',
+                         'job_id':'id'},inplace=True)
+
+# %%
+df_job_3.to_json('n.json',orient='records')
 
 # %% [markdown]
 # ### create html
@@ -537,133 +577,133 @@ df_job_3.to_csv(cwd+'job_3.csv',index=False)
 # #### html function
 
 # %%
-#function to create html
+# #function to create html
 
-def generate_html_with_tiles(url_dict, filename=f'naukri'):
-    # Begin writing the HTML content
-    html_content = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>URL Tiles</title>
-    <style>
-        .tile {
-            display: inline-block;
-            margin: 10px;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            background-color: #f9f9f9;
-            cursor: pointer;
-            text-align: center;
-            min-width: 100px;
-        }
-        .clicked {
-            background-color: lightgreen;
-        }
-    </style>
-</head>
-<body>
-    <div id="tiles-container">
-'''
+# def generate_html_with_tiles(url_dict, filename=f'naukri'):
+#     # Begin writing the HTML content
+#     html_content = '''<!DOCTYPE html>
+# <html lang="en">
+# <head>
+#     <meta charset="UTF-8">
+#     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+#     <title>URL Tiles</title>
+#     <style>
+#         .tile {
+#             display: inline-block;
+#             margin: 10px;
+#             padding: 20px;
+#             border: 1px solid #ccc;
+#             border-radius: 8px;
+#             background-color: #f9f9f9;
+#             cursor: pointer;
+#             text-align: center;
+#             min-width: 100px;
+#         }
+#         .clicked {
+#             background-color: lightgreen;
+#         }
+#     </style>
+# </head>
+# <body>
+#     <div id="tiles-container">
+# '''
 
-    # Add tiles for each URL
-    for display_text, url in url_dict.items():
-        html_content += f'''
-        <div class="tile" onclick="handleClick(this, '{url}')">
-            {display_text}
-        </div>
-'''
+#     # Add tiles for each URL
+#     for display_text, url in url_dict.items():
+#         html_content += f'''
+#         <div class="tile" onclick="handleClick(this, '{url}')">
+#             {display_text}
+#         </div>
+# '''
 
-    # Add script to handle clicks and storage
-    html_content += '''
-    </div>
-    <script>
-        function handleClick(tile, url) {
-            let clickedTiles = JSON.parse(localStorage.getItem('clickedTiles')) || [];
-            if (clickedTiles.includes(url)) {
-                // If already clicked, remove from clickedTiles and remove clicked class
-                clickedTiles = clickedTiles.filter(item => item !== url);
-                tile.classList.remove('clicked');
-            } else {
-                // If not clicked, add to clickedTiles and add clicked class
-                clickedTiles.push(url);
-                tile.classList.add('clicked');
-            }
-            localStorage.setItem('clickedTiles', JSON.stringify(clickedTiles));
-            window.open(url, '_blank');  // Open the URL in a new tab
-        }
+#     # Add script to handle clicks and storage
+#     html_content += '''
+#     </div>
+#     <script>
+#         function handleClick(tile, url) {
+#             let clickedTiles = JSON.parse(localStorage.getItem('clickedTiles')) || [];
+#             if (clickedTiles.includes(url)) {
+#                 // If already clicked, remove from clickedTiles and remove clicked class
+#                 clickedTiles = clickedTiles.filter(item => item !== url);
+#                 tile.classList.remove('clicked');
+#             } else {
+#                 // If not clicked, add to clickedTiles and add clicked class
+#                 clickedTiles.push(url);
+#                 tile.classList.add('clicked');
+#             }
+#             localStorage.setItem('clickedTiles', JSON.stringify(clickedTiles));
+#             window.open(url, '_blank');  // Open the URL in a new tab
+#         }
 
-        // Mark previously clicked tiles
-        window.onload = function() {
-            let clickedTiles = JSON.parse(localStorage.getItem('clickedTiles')) || [];
-            let tiles = document.querySelectorAll('.tile');
-            tiles.forEach(tile => {
-                let url = tile.getAttribute('onclick').split("handleClick(this, '")[1].slice(0, -2);
-                if (clickedTiles.includes(url)) {
-                    tile.classList.add('clicked');
-                }
-            });
-        }
-    </script>
-</body>
-</html>'''
+#         // Mark previously clicked tiles
+#         window.onload = function() {
+#             let clickedTiles = JSON.parse(localStorage.getItem('clickedTiles')) || [];
+#             let tiles = document.querySelectorAll('.tile');
+#             tiles.forEach(tile => {
+#                 let url = tile.getAttribute('onclick').split("handleClick(this, '")[1].slice(0, -2);
+#                 if (clickedTiles.includes(url)) {
+#                     tile.classList.add('clicked');
+#                 }
+#             });
+#         }
+#     </script>
+# </body>
+# </html>'''
 
-    # Write to the specified HTML file
-    with open(f'{cwd}{filename}.html', 'w') as file:
-        file.write(html_content)
+#     # Write to the specified HTML file
+#     with open(f'{cwd}{filename}.html', 'w') as file:
+#         file.write(html_content)
 
 # %% [markdown]
 # #### creating html files
 
 # %%
-# generate html files
+# # generate html files
 
-def generate_html_from_df(df,filename):
-    job = {}
-    print(len(df))
-    if len(df) == 0:
-        return
-    for i,row in df.iterrows():
-        job[row['display_text']]=row['job_url']
+# def generate_html_from_df(df,filename):
+#     job = {}
+#     print(len(df))
+#     if len(df) == 0:
+#         return
+#     for i,row in df.iterrows():
+#         job[row['display_text']]=row['job_url']
 
-    generate_html_with_tiles(job,filename)
-
-# %%
-query_1 = {
-    '1_naukri_apply':'apply_on_company_site != "Apply on company site"',
-    '2_naukri_save':'apply_on_company_site == "Apply on company site"'
-}
-
-query_2 = {
-    '_1':'keyskills_match == "ni-icon-check_circle"',
-    '_2':'company_rating >= 3.0 or company_rating.isnull()'
-}
-
-query_3 = {
-    '_1':'keyword_score >= 5'
-}
-
-query_4 = {
-    '_1_remote':'remote == "Remote"',
-    '_2_delhi_mumbai':'location_score == 2 or location_score==3',
-    '_3_other_states':'location_score > 3',
-    # '_2_mumbai':'location_score == 2',
-    # '_3_delhi':'location_score == 3',
-    # '_4_bangalore':'location_score == 4',
-    # '_6_hyderabad':'location_score == 6'
-}
-
+#     generate_html_with_tiles(job,filename)
 
 # %%
-for q1_name,q1_query in query_1.items():
-    for q2_name,q2_query in query_2.items():
-        for q3_name,q3_query in query_3.items():
-            for q4_name,q4_query in query_4.items():
-                f_name = q1_name + q2_name + q3_name + q4_name
-                temp_df = df_job_3.query(q1_query).query(q2_query).query(q3_query).query(q4_query)
-                generate_html_from_df(temp_df,f_name)
+# query_1 = {
+#     '1_naukri_apply':'apply_on_company_site != "Apply on company site"',
+#     '2_naukri_save':'apply_on_company_site == "Apply on company site"'
+# }
+
+# query_2 = {
+#     '_1':'keyskills_match == "ni-icon-check_circle"',
+#     '_2':'company_rating >= 3.0 or company_rating.isnull()'
+# }
+
+# query_3 = {
+#     '_1':'keyword_score >= 5'
+# }
+
+# query_4 = {
+#     '_1_remote':'remote == "Remote"',
+#     '_2_delhi_mumbai':'location_score == 2 or location_score==3',
+#     '_3_other_states':'location_score > 3',
+#     # '_2_mumbai':'location_score == 2',
+#     # '_3_delhi':'location_score == 3',
+#     # '_4_bangalore':'location_score == 4',
+#     # '_6_hyderabad':'location_score == 6'
+# }
+
+
+# %%
+# for q1_name,q1_query in query_1.items():
+#     for q2_name,q2_query in query_2.items():
+#         for q3_name,q3_query in query_3.items():
+#             for q4_name,q4_query in query_4.items():
+#                 f_name = q1_name + q2_name + q3_name + q4_name
+#                 temp_df = df_job_3.query(q1_query).query(q2_query).query(q3_query).query(q4_query)
+#                 generate_html_from_df(temp_df,f_name)
 
 
 # %%
