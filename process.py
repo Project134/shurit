@@ -568,6 +568,37 @@ df_job_3.rename(columns={'job_url':'url',
                          'job_id':'id'},inplace=True)
 
 # %%
+df_job_3.columns
+
+# %%
+required_columns = ['id', 'url',
+                    'company_name','company_rating',
+                    'job_title','job_experience', 'salary',
+                    'job_location', 'remote',
+                    'keywords',
+                    'apply_on_company_site','easy_apply',
+                    'keyskills_match', 'keyword_score', 'location_score','category']
+
+# %%
+df_job_3 = df_job_3[required_columns]
+
+# %%
+def modify_column(df,condition,col_to_modify,previous_value,new_value):
+    if col_to_modify not in df.columns:
+        df[col_to_modify] = previous_value
+
+    filtered_df = df.query(f'{condition} and {col_to_modify}=="{previous_value}"')
+    df.loc[filtered_df.index,col_to_modify]= new_value
+    return df
+
+
+# %%
+modify_column(df_job_3,'company_rating > 3',"category","All","good company")
+
+# %%
+
+
+# %%
 df_job_3.to_json('n.json',orient='records')
 
 # %% [markdown]
