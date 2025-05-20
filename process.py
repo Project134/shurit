@@ -185,7 +185,7 @@ def extract_tag_data_to_dict_and_df(ele):
 
 # %%
 # setting url
-urls = read_json('naukri_urls')
+urls = read_json('n_urls')
 
 # urls = {'one':'https://www.naukri.com/pyspark-jobs?k=pyspark&jobAge=7&experience=24'}
 
