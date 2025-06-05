@@ -195,15 +195,15 @@ def execute_python_file(filepath):
 # setting url
 # urls = read_json('n_urls')
 
-urls = {'naukri : all jobs + > 25lpa + remote + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&wfhType=2&jobAge=2&experience=10',
- 'naukri : all jobs + > 25lpa + remote + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&wfhType=2&jobAge=2&experience=12',
- 'naukri : all jobs + > 25lpa + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
- 'naukri : all jobs + > 25lpa + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
+urls = {'naukri : all jobs + no_filter + remote + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?&wfhType=2&jobAge=2&experience=10',
+ 'naukri : all jobs + no_filter + remote + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?&wfhType=2&jobAge=2&experience=12',
+ 'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
+ 'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
 
 # current directory
 cwd = os.getcwd()+"/"
 
-execute_python_file(cwd+'/pwd.py')
+
 
 
 # %%
