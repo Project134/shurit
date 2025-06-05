@@ -180,29 +180,34 @@ def extract_tag_data_to_dict_and_df(ele):
 
     return ele_data_str, ele_data_df
 
+# %%
+# execute python file
+
+def execute_python_file(filepath):
+    with open(filepath, 'r') as file:
+        code = file.read()
+    exec(code)
+
 # %% [markdown]
 # ## initialise parameters
 
 # %%
 # setting url
-urls = read_json('n_urls')
+# urls = read_json('n_urls')
 
-# urls = {'one':'https://www.naukri.com/pyspark-jobs?k=pyspark&jobAge=7&experience=24'}
+urls = {'naukri : all jobs + > 25lpa + remote + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&wfhType=2&jobAge=2&experience=10',
+ 'naukri : all jobs + > 25lpa + remote + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&wfhType=2&jobAge=2&experience=12',
+ 'naukri : all jobs + > 25lpa + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
+ 'naukri : all jobs + > 25lpa + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?ctcFilter=501&ctcFilter=25to50&ctcFilter=50to75&ctcFilter=75to100&ctcFilter=100to500&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
 
 # current directory
 cwd = os.getcwd()+"/"
 
-# job1_name = input('Enter name for job_1')
-# job1_password = input('Enter pwd for job_1')
+execute_python_file(cwd+'/pwd.py')
 
-# job2_name = input('Enter name for job_2')
-# job2_password = input('Enter pwd for job_2')
 
-# job1_name = ''
-# job1_password = ''
-
-# job2_name = ''
-# job2_password = ''
+# %%
+from pwd_ip import *
 
 # %% [markdown]
 # ## open chrome and get jobs tiles from the url 
@@ -534,6 +539,7 @@ location_score_db = {
     'noida':3,
     'gurugram':3,
     'gurgaon':3,
+    'ncr':3,
     'bangalore':4,
     'bengaluru':4,
     'pune':5,
@@ -591,15 +597,25 @@ def modify_column(df,condition,col_to_modify,previous_value,new_value):
 
 
 # %%
-## category assignment 
+## category assignment
 
-max_keyword_score = df_job_3['keyword_score'].max()
-
+max_keyword_score = df_job_3[ 'keyword_score']. max()
 category_conditions = {
-    'P1': "(location_score == 3) and (keyskills_match == 'ni-icon-check_circle') and (easy_apply == 'Apply')",
-    'P2': "(location_score == 1) and (keyskills_match == 'ni-icon-check_circle') and (easy_apply == 'Apply')",
-    'P1': "(keyword_score > @max_keyword_score - 10) and (easy_apply == 'Apply')"
-    
+
+'A1_skill_match_delhi': "(location_score == 3) and (keyskills_match == 'ni-icon-check_circle') and (easy_apply == 'Apply')",
+
+'A2_skill_match_remote' : "((location score = 1) or (remote =='Remote')) and (keyskills _match == 'ni-icon-check_circle') and (easy_apply == 'Apply' )",
+
+'A3_score_match':"keyword_score > @max _keyword_score - 10 and (easy_apply == 'Apply')",
+
+
+'A4_skill_match_good_company': "(company_rating › 3:5 or company_rating.isnull()) and (easy_apply =  'Apply') and (keyskills_match == 'ni-icon-check_circle')",
+
+'A5_remaining_easy_apply':"(easy_apply =  'Apply')",
+
+
+'B1_skill_match_remote_delhi_good_company': "( (Location score == 3) or (location score = 1) or (remote =='Remote') ) and (keyskills_match == 'ni-icon-check_circle') and (apply_on company_site == 'Apply on company site') and ( company_rating › 3:5 or company_rating.isnull() )"
+
 }
 
 # %%
