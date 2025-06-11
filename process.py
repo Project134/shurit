@@ -197,8 +197,10 @@ def execute_python_file(filepath):
 
 urls = {'naukri : all jobs + no_filter + remote + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?&wfhType=2&jobAge=2&experience=10',
  'naukri : all jobs + no_filter + remote + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?&wfhType=2&jobAge=2&experience=12',
- 'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
- 'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?&cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
+ 'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
+ 'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
+
+print(urls)
 
 # current directory
 cwd = os.getcwd()+"/"
@@ -604,17 +606,17 @@ category_conditions = {
 
 'A1_skill_match_delhi': "(location_score == 3) and (keyskills_match == 'ni-icon-check_circle') and (easy_apply == 'Apply')",
 
-'A2_skill_match_remote' : "((location score = 1) or (remote =='Remote')) and (keyskills _match == 'ni-icon-check_circle') and (easy_apply == 'Apply' )",
+'A2_skill_match_remote' : "((location_score == 1) or (remote =='Remote')) and (keyskills_match == 'ni-icon-check_circle') and (easy_apply == 'Apply' )",
 
-'A3_score_match':"keyword_score > @max _keyword_score - 10 and (easy_apply == 'Apply')",
-
-
-'A4_skill_match_good_company': "(company_rating › 3:5 or company_rating.isnull()) and (easy_apply =  'Apply') and (keyskills_match == 'ni-icon-check_circle')",
-
-'A5_remaining_easy_apply':"(easy_apply =  'Apply')",
+'A3_score_match':"keyword_score > @max_keyword_score - 10 and (easy_apply == 'Apply')",
 
 
-'B1_skill_match_remote_delhi_good_company': "( (Location score == 3) or (location score = 1) or (remote =='Remote') ) and (keyskills_match == 'ni-icon-check_circle') and (apply_on company_site == 'Apply on company site') and ( company_rating › 3:5 or company_rating.isnull() )"
+'A4_skill_match_good_company': "(company_rating > 3.5 or company_rating.isnull()) and (easy_apply ==  'Apply') and (keyskills_match == 'ni-icon-check_circle')",
+
+'A5_remaining_easy_apply':"(easy_apply ==  'Apply')",
+
+
+'B1_skill_match_remote_delhi_good_company': "( (location_score == 3) or (location_score == 1) or (remote =='Remote') ) and (keyskills_match == 'ni-icon-check_circle') and (apply_on_company_site == 'Apply on company site') and ( company_rating > 3.5 or company_rating.isnull() )"
 
 }
 
