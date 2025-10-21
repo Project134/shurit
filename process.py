@@ -24,7 +24,7 @@ import_or_install('selenium')
 import_or_install('bs4')
 import_or_install('requests')
 import_or_install('lxml')
-
+import_or_install('pandas')
 
 # %%
 import os 
@@ -93,6 +93,14 @@ def scroll(driver):
 
 
 # %%
+# random wait 
+
+def wait(num=5):
+    wait = random.randint(1,num)
+    time.sleep(wait)
+
+
+# %%
 # this function collects data from the tiles and accumulates in the tiles list
 
 def collect_data(driver,tile_class):
@@ -100,14 +108,6 @@ def collect_data(driver,tile_class):
     soup = BeautifulSoup(html_content,'lxml')
     tile = soup.find_all('div',attrs={"class":tile_class})
     return tile
-
-
-# %%
-# random wait 
-
-def wait():
-    wait = random.randint(1,5)
-    time.sleep(wait)
 
 
 # %%
@@ -195,8 +195,8 @@ def execute_python_file(filepath):
 # setting url
 # urls = read_json('n_urls')
 
-urls = {'naukri : all jobs + no_filter + remote + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?&wfhType=2&jobAge=2&experience=10',
- 'naukri : all jobs + no_filter + remote + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?&wfhType=2&jobAge=2&experience=12',
+urls = {'naukri : all jobs + no_filter + remote + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?wfhType=2&jobAge=2&experience=10',
+ 'naukri : all jobs + no_filter + remote + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?wfhType=2&jobAge=2&experience=12',
  'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
  'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
 
@@ -206,10 +206,12 @@ print(urls)
 cwd = os.getcwd()+"/"
 
 
+job1_name = ''
+job1_password = ''
 
 
-# %%
-from pwd_ip import *
+job2_name = ''
+job2_password = ''
 
 # %% [markdown]
 # ## open chrome and get jobs tiles from the url 
@@ -369,41 +371,72 @@ driver = login_naukri(job2_name,job2_password)
 
 tiles = read_json('job_2')
 count = 0
-jobs_to_be_processed = len(job_1)
+jobs_to_be_processed = len(df_job_1)
+batch_size = 10
 
-# for index,job_row in df_job_1.tail().iterrows():
-for index,job_row in df_job_1.iterrows():
+# Get list of jobs to process
+jobs_list = []
+for index, job_row in df_job_1.iterrows():
     job_id = str(job_row['job_id'])
     job_url = job_row['job_url']
     
-
     if job_id in tiles:
         print(f'{job_id} already in database')
         continue
     
-    driver.get(job_url)
-    wait()
-    scroll(driver)
-    wait()
-    tile = collect_data(driver,tile_class='styles_left-section-container__btAcB')
-    if tile:
-        tiles[job_id] = str(tile[0])
-    # tiles = tiles + [(job_id,tile[0])]
-    wait()
-    count+=1
-    if count >=40:
-        with open(cwd+'job_2.json', 'w') as json_file:
-            json.dump(tiles, json_file)
-        count = 0
-        tiles = read_json('job_2')
-        print(f'Percentage of files processed = {index/jobs_to_be_processed:.1%}')
-    print(f'{index} out of {jobs_to_be_processed} (done)')    
+    jobs_list.append((index, job_id, job_url))
 
-driver.close()
+# Process in batches of 10
+for batch_start in range(0, len(jobs_list), batch_size):
+    batch = jobs_list[batch_start:batch_start + batch_size]
+    
+    # Open all URLs in the batch in different tabs
+    for i, (index, job_id, job_url) in enumerate(batch):
+        if i == 0 and batch_start == 0:
+            driver.get(job_url)  # First link in first batch
+        else:
+            driver.execute_script(f"window.open('{job_url}', '_blank');")
+    
+    time.sleep(6)
+    
+    # Process each tab
+    for tab_idx, (index, job_id, job_url) in enumerate(batch):
+        # Switch to the corresponding tab
+        driver.switch_to.window(driver.window_handles[tab_idx])
+        
+        print(f'Processing {job_id} in tab {tab_idx + 1}')
+        
+        wait(2)
+        
+        tile = collect_data(driver, tile_class='styles_left-section-container__btAcB')
+        if tile:
+            tiles[job_id] = str(tile[0])
+        
+        count += 1
+        
+        if count >= 40:
+            with open(cwd + 'job_2.json', 'w') as json_file:
+                json.dump(tiles, json_file)
+            count = 0
+            tiles = read_json('job_2')
+            print(f'Percentage of files processed = {index/jobs_to_be_processed:.1%}')
+        
+        print(f'{index} out of {jobs_to_be_processed} (done)')
+    
+    # Close all tabs except the first one
+    main_window = driver.window_handles[0]
+    for handle in driver.window_handles[1:]:
+        driver.switch_to.window(handle)
+        driver.close()
+    driver.switch_to.window(main_window)
+    
+    wait()
 
-# writing the tiles result in a file
-with open(cwd+'job_2.json', 'w') as json_file:
+# Final save
+with open(cwd + 'job_2.json', 'w') as json_file:
     json.dump(tiles, json_file)
+
+driver.quit()
 
 # %% [markdown]
 # ### create df - job_2
