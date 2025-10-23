@@ -200,6 +200,10 @@ urls = {'naukri : all jobs + no_filter + remote + 2 days + 10+ years': 'https://
  'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 10+ years': 'https://www.naukri.com/jobs-in-india?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10',
  'naukri : all jobs + no_filter + Delhi - all areas + 2 days + 12+ years': 'https://www.naukri.com/jobs-in-india?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=12'}
 
+
+
+urls = {'testing string':'https://www.naukri.com/data-analytics-jobs?cityTypeGid=6&cityTypeGid=73&cityTypeGid=220&cityTypeGid=9508&jobAge=2&experience=10'}
+
 print(urls)
 
 # current directory
@@ -366,13 +370,15 @@ print(f'total rows = {len(df_job_1)}')
 df_job_1 = pd.read_csv(cwd+'job_1.csv')
 df_job_1['job_id'] = df_job_1['job_id'].astype(str)
 
+
+
 # %%
 driver = login_naukri(job2_name,job2_password) 
 
 tiles = read_json('job_2')
 count = 0
 jobs_to_be_processed = len(df_job_1)
-batch_size = 10
+batch_size = 20
 
 # Get list of jobs to process
 jobs_list = []
@@ -386,40 +392,55 @@ for index, job_row in df_job_1.iterrows():
     
     jobs_list.append((index, job_id, job_url))
 
-# Process in batches of 10
+# Process in batches
 for batch_start in range(0, len(jobs_list), batch_size):
     batch = jobs_list[batch_start:batch_start + batch_size]
+    
+    # Track window handles for each job
+    job_to_handle = {}
     
     # Open all URLs in the batch in different tabs
     for i, (index, job_id, job_url) in enumerate(batch):
         if i == 0 and batch_start == 0:
             driver.get(job_url)  # First link in first batch
+            job_to_handle[job_id] = driver.current_window_handle
         else:
+            # Store current handles before opening new tab
+            handles_before = set(driver.window_handles)
             driver.execute_script(f"window.open('{job_url}', '_blank');")
+            # Find the new handle
+            handles_after = set(driver.window_handles)
+            new_handle = (handles_after - handles_before).pop()
+            job_to_handle[job_id] = new_handle
     
-    time.sleep(6)
+    time.sleep(10)
     
-    # Process each tab
-    for tab_idx, (index, job_id, job_url) in enumerate(batch):
-        # Switch to the corresponding tab
-        driver.switch_to.window(driver.window_handles[tab_idx])
+    # Process each tab using the correct handle mapping
+    for i, (index, job_id, job_url) in enumerate(batch):
+        # Switch to the correct tab for this job_id
+        driver.switch_to.window(job_to_handle[job_id])
         
-        print(f'Processing {job_id} in tab {tab_idx + 1}')
+        # Verify URL to confirm correct mapping
+        current_url = driver.current_url
+        print(f'Processing {job_id} - URL: {current_url[:50]}...')
         
-        wait(2)
+        time.sleep(2)
         
         tile = collect_data(driver, tile_class='styles_left-section-container__btAcB')
         if tile:
             tiles[job_id] = str(tile[0])
+            print(f'✓ Saved data for {job_id}')
+        else:
+            print(f'✗ No data for {job_id}')
         
         count += 1
         
-        if count >= 40:
+        if count >= 110:
             with open(cwd + 'job_2.json', 'w') as json_file:
                 json.dump(tiles, json_file)
             count = 0
             tiles = read_json('job_2')
-            print(f'Percentage of files processed = {index/jobs_to_be_processed:.1%}')
+            print(f'Percentage of files processed = {(batch_start + i + 1)/len(jobs_list):.1%}')
         
         print(f'{index} out of {jobs_to_be_processed} (done)')
     
@@ -453,7 +474,9 @@ for job_id,tile in job_2.items():
 
 # %%
 # # creating a dataframe to find_out columns keys
-# tile = job_2['130225000057']
+# TESTING #
+
+# tile = job_2['221025503195']
 # dict_tile, df_tile = extract_tag_data_to_dict_and_df(tile)
 # df_tile.to_csv(cwd+'df_tile.csv')
 # dict_tile
