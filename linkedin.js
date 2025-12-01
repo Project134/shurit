@@ -406,6 +406,26 @@ async function scrollFunction() {
 }
 
 async function extractLinkedInPosts() {
+  // Step 0: Click all "Show translation" buttons first
+  console.log('Checking for translation buttons...');
+  const translationButtons = document.querySelectorAll('.feed-shared-see-translation-button');
+  
+  for (const btn of translationButtons) {
+    try {
+      // Check if button is visible and clickable
+      if (btn.offsetParent !== null) {
+        btn.click();
+        addLog('Clicked translation button', 'info');
+        // Small delay to allow translation to load
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    } catch (e) {
+      console.log('Could not click a translation button:', e);
+    }
+  }
+  
+  console.log(`Processed ${translationButtons.length} translation buttons`);
+  
   // Step 1: Click all "see more" buttons to expand truncated content
   console.log('Expanding truncated posts...');
   const moreButtons = document.querySelectorAll('.feed-shared-inline-show-more-text__see-more-less-toggle');
@@ -423,7 +443,29 @@ async function extractLinkedInPosts() {
   console.log(`Expanded ${moreButtons.length} posts`);
   
   // Step 2: Extract data from each post
-  const posts = document.querySelectorAll('[role="article"]');
+  // Try multiple selectors to find posts
+  let posts = document.querySelectorAll('[role="article"]');
+  
+  if (posts.length === 0) {
+    console.log('No posts found with [role="article"], trying alternative selectors...');
+    addLog('No posts found with primary selector, trying alternatives...', 'warning');
+    
+    // Try alternative selectors
+    posts = document.querySelectorAll('.feed-shared-update-v2');
+    
+    if (posts.length === 0) {
+      posts = document.querySelectorAll('[data-urn*="activity"]');
+    }
+  }
+  
+  console.log(`Found ${posts.length} posts to extract`);
+  addLog(`Found ${posts.length} posts to extract`, 'info');
+  
+  if (posts.length === 0) {
+    addLog('No posts found on page. Try scrolling first.', 'error');
+    return [];
+  }
+  
   const data = [];
   
   posts.forEach((post, index) => {
@@ -433,13 +475,17 @@ async function extractLinkedInPosts() {
       // Extract just the numeric ID from URN format (urn:li:activity:6904835503909408768)
       const id = urnId.includes(':') ? urnId.split(':').pop() : urnId;
       
-      // Extract poster name
-      const nameElement = post.querySelector('.update-components-actor__title .hoverable-link-text span[dir="ltr"] span[aria-hidden="true"]');
-      const postedBy = nameElement ? nameElement.textContent.trim() : '';
+      console.log(`Processing post ${index + 1}, URN: ${urnId}`);
       
       // Extract poster description
       const descElement = post.querySelector('.update-components-actor__description span[aria-hidden="true"]');
       const posterDescription = descElement ? descElement.textContent.trim() : '';
+      
+      // Extract poster name
+      const nameElement = post.querySelector('.update-components-actor__title .hoverable-link-text span[dir="ltr"] span[aria-hidden="true"]');
+      const postedBy = nameElement ? nameElement.textContent.trim() : '';
+      
+      console.log(`  Posted by: ${postedBy}`);
       
       // Extract connection type (1st, 2nd, 3rd+, etc.)
       const connectionElement = post.querySelector('.update-components-actor__supplementary-actor-info span[aria-hidden="true"]');
@@ -474,6 +520,25 @@ async function extractLinkedInPosts() {
           .trim();
       }
       
+      console.log(`  Content length: ${postContent.length} characters`);
+      
+      // Extract post URL from the post's URN
+      let postUrl = '';
+      if (urnId && urnId.includes(':')) {
+        // Extract numeric ID from URN (e.g., urn:li:activity:7401363182046425088)
+        const numericId = urnId.split(':').pop();
+        postUrl = `https://www.linkedin.com/feed/update/${urnId.replace('urn:li:', 'urn:li:')}`;
+      }
+      
+      // Alternative: Look for permalink or share link in the post
+      const shareLink = post.querySelector('a[href*="/feed/update/"]');
+      if (shareLink && !postUrl) {
+        postUrl = shareLink.getAttribute('href');
+        if (postUrl && !postUrl.startsWith('http')) {
+          postUrl = 'https://www.linkedin.com' + postUrl;
+        }
+      }
+      
       // Extract hashtags/tags (pipe separated)
       const tagElements = post.querySelectorAll('.update-components-text a[href*="keywords"]');
       const postTags = Array.from(tagElements)
@@ -504,24 +569,31 @@ async function extractLinkedInPosts() {
         connection,
         urlPostedBy,
         postAge,
+        postUrl,
         postContent,
         postTags,
         emailIds,
         phoneNo
       };
       
-      data.push(postData);
+      // Only add if we have at least some basic data
+      if (postedBy || postContent) {
+        data.push(postData);
+        console.log(`  ✓ Post ${index + 1} extracted successfully`);
+      } else {
+        console.log(`  ✗ Post ${index + 1} skipped - no meaningful data found`);
+      }
       
     } catch (e) {
       console.error(`Error extracting post ${index}:`, e);
+      addLog(`Error on post ${index + 1}: ${e.message}`, 'error');
     }
   });
   
-  console.log(`Extracted ${data.length} posts`);
+  console.log(`Successfully extracted ${data.length} posts`);
+  addLog(`Successfully extracted ${data.length} posts with data`, 'success');
   return data;
 }
-
-
 // Execute function
 async function executeFunction() {
   console.log('We are in execute function');
