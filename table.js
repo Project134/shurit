@@ -1,7 +1,4 @@
 console.log('html');
-// let table = new DataTable('#myTable');
-
-// fetch('data.json').then(result => {console.log('success')}).catch(result=>{console.log('fail')})
 
 document.getElementById('fileInput').addEventListener('change', function(event) {
     const file = event.target.files[0];
@@ -10,14 +7,11 @@ document.getElementById('fileInput').addEventListener('change', function(event) 
     if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
-            const jsonData = JSON.parse(e.target.result); // Parse the JSON content
-            console.log(jsonData); // You can use jsonData as needed
-            createCategoryTables(jsonData,fileName);
-            
-
+            const jsonData = JSON.parse(e.target.result);
+            console.log(jsonData);
+            createCategoryTables(jsonData, fileName);
         };
-        reader.readAsText(file); // Read file as text
-        
+        reader.readAsText(file);
     }
 })
 
@@ -25,7 +19,6 @@ function addToLocalStorage(value){
     if(!localStorage.getItem('clickedItems')){
         let clickedItems = []
         localStorage.setItem('clickedItems', JSON.stringify(clickedItems))
-        
     }
     clickedItems = JSON.parse(localStorage.getItem('clickedItems'));
     clickedItems.push(value)
@@ -33,7 +26,7 @@ function addToLocalStorage(value){
     console.log(localStorage.getItem('clickedItems'));
 }
 
-function createCategoryTables(data,fileName) {
+function createCategoryTables(data, fileName) {
 
     let clickedItems = JSON.parse(localStorage.getItem('clickedItems'));
     if(!clickedItems){
@@ -46,32 +39,27 @@ function createCategoryTables(data,fileName) {
     
     const categories = {};
     data.forEach(item => {
-        
         if (!categories[item.category]) {
             categories[item.category] = [];
         }
         categories[item.category].push(item);
     });
 
-
     for (const category in categories) {
         // Create table element
         const table = document.createElement('table');
         
-
-        // class="table table-striped" style="width:100%"
-        table.className = 'display table table-striped'; // DataTables requires class 'display'
-        table.setAttribute('id', category.replace(/\s+/g, '-').toLowerCase()); // Create unique ID for the table
+        table.className = 'display table table-striped';
+        table.setAttribute('id', category.replace(/\s+/g, '-').toLowerCase());
 
         // Create table header
         const headerRow = document.createElement('thead');
         const header = document.createElement('tr');
         
         const allColumns = Object.keys(categories[category][0]);
-        const specialColumns = ['category','url']
+        const specialColumns = ['category', 'url']
         const tableColumns = allColumns.filter(item => !specialColumns.includes(item.toLowerCase()))
         console.log(specialColumns)
-
 
         for(let col of tableColumns){
             const th = document.createElement('th');
@@ -84,13 +72,12 @@ function createCategoryTables(data,fileName) {
         const tbody = document.createElement('tbody');
 
         const tableData = categories[category]
-        
 
         for(let obj of tableData){
             const row = document.createElement('tr');
             
             uid = `${fileName}_${obj['id']}`
-            row.setAttribute('id',uid)
+            row.setAttribute('id', uid)
 
             if(clickedItems.includes(uid)){
                 row.classList.add("table-success"); 
@@ -109,17 +96,23 @@ function createCategoryTables(data,fileName) {
             tbody.appendChild(row);
         }
         table.appendChild(tbody);
-        
 
         // Add table to container
         const categoryHeader = document.createElement('h2');
-        categoryHeader.textContent = category; // Add category title above the table
+        categoryHeader.textContent = category;
+        categoryHeader.style.marginTop = '30px';
         tablesContainer.appendChild(categoryHeader);
         tablesContainer.appendChild(table);
         
-        // Initialize DataTable
-        $(table).DataTable({paging:false});
+        // Initialize DataTable with settings to prevent horizontal scroll
+        $(table).DataTable({
+            paging: false,
+            scrollX: false,
+            autoWidth: false,
+            columnDefs: [{
+                targets: '_all',
+                className: 'text-wrap'
+            }]
+        });
     }
-
-
 }

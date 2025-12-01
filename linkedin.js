@@ -1,6 +1,5 @@
 async function addDataToIndexedDB(dataList, dbName, storeName) {
   return new Promise((resolve, reject) => {
-    // Open the database with a version number to trigger upgrade if needed
     const request = indexedDB.open(dbName, 1);
     
     request.onerror = () => {
@@ -9,8 +8,6 @@ async function addDataToIndexedDB(dataList, dbName, storeName) {
     
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
-      
-      // Create the object store if it doesn't exist
       if (!db.objectStoreNames.contains(storeName)) {
         db.createObjectStore(storeName, { keyPath: 'id' });
         console.log(`Created object store: ${storeName}`);
@@ -20,14 +17,12 @@ async function addDataToIndexedDB(dataList, dbName, storeName) {
     request.onsuccess = (event) => {
       const db = event.target.result;
       
-      // Check if object store exists
       if (!db.objectStoreNames.contains(storeName)) {
         db.close();
         reject(new Error(`Object store "${storeName}" does not exist`));
         return;
       }
       
-      // Start a transaction
       const transaction = db.transaction([storeName], 'readwrite');
       const objectStore = transaction.objectStore(storeName);
       
@@ -35,7 +30,6 @@ async function addDataToIndexedDB(dataList, dbName, storeName) {
       let errorCount = 0;
       const errors = [];
       
-      // Add/update each item in the list
       dataList.forEach((item, index) => {
         if (!item.id) {
           errors.push(`Item at index ${index} is missing an 'id' field`);
@@ -43,7 +37,6 @@ async function addDataToIndexedDB(dataList, dbName, storeName) {
           return;
         }
         
-        // Use put to insert or update (put replaces if id exists)
         const putRequest = objectStore.put(item);
         
         putRequest.onsuccess = () => {
@@ -56,7 +49,6 @@ async function addDataToIndexedDB(dataList, dbName, storeName) {
         };
       });
       
-      // Handle transaction completion
       transaction.oncomplete = () => {
         db.close();
         resolve({
@@ -75,7 +67,6 @@ async function addDataToIndexedDB(dataList, dbName, storeName) {
   });
 }
 
-// Function to delete all data from IndexedDB
 async function deleteAllDataFromIndexedDB(dbName, storeName) {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName);
@@ -87,18 +78,15 @@ async function deleteAllDataFromIndexedDB(dbName, storeName) {
     request.onsuccess = (event) => {
       const db = event.target.result;
       
-      // Check if object store exists
       if (!db.objectStoreNames.contains(storeName)) {
         db.close();
         reject(new Error(`Object store "${storeName}" does not exist`));
         return;
       }
       
-      // Start a transaction
       const transaction = db.transaction([storeName], 'readwrite');
       const objectStore = transaction.objectStore(storeName);
       
-      // Clear all records
       const clearRequest = objectStore.clear();
       
       clearRequest.onsuccess = () => {
@@ -115,7 +103,6 @@ async function deleteAllDataFromIndexedDB(dbName, storeName) {
 }
 
 function attachControlDiv() {
-  // Create the main container div
   const controlDiv = document.createElement('div');
   controlDiv.id = 'control-panel';
   controlDiv.style.cssText = `
@@ -129,9 +116,9 @@ function attachControlDiv() {
     border-radius: 8px;
     cursor: move;
     user-select: none;
+    min-width: 280px;
   `;
 
-  // Create drag handle
   const dragHandle = document.createElement('div');
   dragHandle.style.cssText = `
     background-color: #ddd;
@@ -146,7 +133,6 @@ function attachControlDiv() {
   `;
   dragHandle.textContent = '⋮⋮ Control Panel ⋮⋮';
 
-  // Create button container
   const buttonContainer = document.createElement('div');
   buttonContainer.style.cssText = `
     display: flex;
@@ -156,7 +142,6 @@ function attachControlDiv() {
     flex-wrap: wrap;
   `;
 
-  // Create Scroll button
   const scrollBtn = document.createElement('button');
   scrollBtn.textContent = 'Scroll';
   scrollBtn.id = 'scroll-btn';
@@ -171,7 +156,6 @@ function attachControlDiv() {
   `;
   scrollBtn.addEventListener('click', scrollFunction);
 
-  // Create Execute button
   const executeBtn = document.createElement('button');
   executeBtn.textContent = 'Execute';
   executeBtn.style.cssText = `
@@ -185,9 +169,8 @@ function attachControlDiv() {
   `;
   executeBtn.addEventListener('click', executeFunction);
 
-  // Create Download button
   const downloadBtn = document.createElement('button');
-  downloadBtn.textContent = 'Download';
+  downloadBtn.textContent = 'CSV';
   downloadBtn.style.cssText = `
     padding: 8px 16px;
     background-color: #2196F3;
@@ -199,7 +182,20 @@ function attachControlDiv() {
   `;
   downloadBtn.addEventListener('click', downloadFunction);
 
-  // Create Delete DB button
+  // Create Download JSON button
+  const downloadJsonBtn = document.createElement('button');
+  downloadJsonBtn.textContent = 'JSON';
+  downloadJsonBtn.style.cssText = `
+    padding: 8px 16px;
+    background-color: #00BCD4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  `;
+  downloadJsonBtn.addEventListener('click', downloadJsonFunction);
+
   const deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete DB';
   deleteBtn.style.cssText = `
@@ -213,7 +209,6 @@ function attachControlDiv() {
   `;
   deleteBtn.addEventListener('click', deleteDBFunction);
 
-  // Create Clear Logs button
   const clearBtn = document.createElement('button');
   clearBtn.textContent = 'Clear Logs';
   clearBtn.style.cssText = `
@@ -227,14 +222,13 @@ function attachControlDiv() {
   `;
   clearBtn.addEventListener('click', clearLogs);
 
-  // Append buttons to button container
   buttonContainer.appendChild(scrollBtn);
   buttonContainer.appendChild(executeBtn);
   buttonContainer.appendChild(downloadBtn);
+  buttonContainer.appendChild(downloadJsonBtn);
   buttonContainer.appendChild(deleteBtn);
   buttonContainer.appendChild(clearBtn);
 
-  // Create status/log div
   const logDiv = document.createElement('div');
   logDiv.id = 'log-panel';
   logDiv.style.cssText = `
@@ -250,22 +244,17 @@ function attachControlDiv() {
     cursor: default;
   `;
 
-  // Append elements to control div
   controlDiv.appendChild(dragHandle);
   controlDiv.appendChild(buttonContainer);
   controlDiv.appendChild(logDiv);
 
-  // Attach to the document body
   document.body.appendChild(controlDiv);
 
-  // Make the panel draggable
   makeDraggable(controlDiv, dragHandle);
 
-  // Add initial log message
   addLog('Control panel initialized', 'info');
 }
 
-// Make element draggable
 function makeDraggable(element, handle) {
   let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
   
@@ -273,7 +262,6 @@ function makeDraggable(element, handle) {
 
   function dragMouseDown(e) {
     e.preventDefault();
-    // Get the mouse cursor position at startup
     pos3 = e.clientX;
     pos4 = e.clientY;
     document.onmouseup = closeDragElement;
@@ -282,25 +270,21 @@ function makeDraggable(element, handle) {
 
   function elementDrag(e) {
     e.preventDefault();
-    // Calculate the new cursor position
     pos1 = pos3 - e.clientX;
     pos2 = pos4 - e.clientY;
     pos3 = e.clientX;
     pos4 = e.clientY;
-    // Set the element's new position
     element.style.top = (element.offsetTop - pos2) + "px";
     element.style.left = (element.offsetLeft - pos1) + "px";
     element.style.right = "auto";
   }
 
   function closeDragElement() {
-    // Stop moving when mouse button is released
     document.onmouseup = null;
     document.onmousemove = null;
   }
 }
 
-// Logging utility function
 function addLog(message, type = 'info') {
   const logPanel = document.getElementById('log-panel');
   if (!logPanel) return;
@@ -313,7 +297,6 @@ function addLog(message, type = 'info') {
 
   const timestamp = new Date().toLocaleTimeString();
   
-  // Color based on log type
   let color = '#333';
   if (type === 'success') color = '#4CAF50';
   if (type === 'error') color = '#f44336';
@@ -323,11 +306,9 @@ function addLog(message, type = 'info') {
   
   logPanel.appendChild(logEntry);
   
-  // Auto-scroll to bottom
   logPanel.scrollTop = logPanel.scrollHeight;
 }
 
-// Clear logs function
 function clearLogs() {
   const logPanel = document.getElementById('log-panel');
   if (logPanel) {
@@ -336,14 +317,11 @@ function clearLogs() {
   }
 }
 
-// Variable to control scroll loop
 let isScrolling = false;
 
-// Scroll function - scrolls until page stops loading new content
 async function scrollFunction() {
   const scrollBtn = document.getElementById('scroll-btn');
   
-  // If already scrolling, stop it
   if (isScrolling) {
     isScrolling = false;
     scrollBtn.textContent = 'Scroll';
@@ -352,7 +330,6 @@ async function scrollFunction() {
     return;
   }
   
-  // Start scrolling
   isScrolling = true;
   scrollBtn.textContent = 'Stop';
   scrollBtn.style.backgroundColor = '#f44336';
@@ -360,22 +337,18 @@ async function scrollFunction() {
   
   let previousHeight = 0;
   let noChangeCount = 0;
-  const maxNoChangeAttempts = 3; // Stop after 3 attempts with no height change
-  const scrollDelay = 2000; // Wait 2 seconds between scrolls
+  const maxNoChangeAttempts = 3;
+  const scrollDelay = 2000;
   
   try {
     while (isScrolling) {
-      // Get current page height
       const currentHeight = document.body.scrollHeight;
       
-      // Scroll to bottom
       window.scrollTo(0, document.body.scrollHeight);
       addLog(`Scrolled to ${currentHeight}px`, 'info');
       
-      // Wait for content to load
       await new Promise(resolve => setTimeout(resolve, scrollDelay));
       
-      // Check if new content loaded
       const newHeight = document.body.scrollHeight;
       
       if (newHeight === previousHeight) {
@@ -387,7 +360,7 @@ async function scrollFunction() {
           break;
         }
       } else {
-        noChangeCount = 0; // Reset counter if new content loaded
+        noChangeCount = 0;
         addLog(`New content loaded (+${newHeight - previousHeight}px)`, 'success');
       }
       
@@ -397,7 +370,6 @@ async function scrollFunction() {
     console.error('Error during scrolling:', error);
     addLog(`Scroll error: ${error.message}`, 'error');
   } finally {
-    // Reset button state
     isScrolling = false;
     scrollBtn.textContent = 'Scroll';
     scrollBtn.style.backgroundColor = '#9C27B0';
@@ -406,17 +378,14 @@ async function scrollFunction() {
 }
 
 async function extractLinkedInPosts() {
-  // Step 0: Click all "Show translation" buttons first
   console.log('Checking for translation buttons...');
   const translationButtons = document.querySelectorAll('.feed-shared-see-translation-button');
   
   for (const btn of translationButtons) {
     try {
-      // Check if button is visible and clickable
       if (btn.offsetParent !== null) {
         btn.click();
         addLog('Clicked translation button', 'info');
-        // Small delay to allow translation to load
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     } catch (e) {
@@ -426,14 +395,12 @@ async function extractLinkedInPosts() {
   
   console.log(`Processed ${translationButtons.length} translation buttons`);
   
-  // Step 1: Click all "see more" buttons to expand truncated content
   console.log('Expanding truncated posts...');
   const moreButtons = document.querySelectorAll('.feed-shared-inline-show-more-text__see-more-less-toggle');
   
   for (const btn of moreButtons) {
     try {
       btn.click();
-      // Small delay to allow content to load
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (e) {
       console.log('Could not click a more button:', e);
@@ -442,15 +409,12 @@ async function extractLinkedInPosts() {
   
   console.log(`Expanded ${moreButtons.length} posts`);
   
-  // Step 2: Extract data from each post
-  // Try multiple selectors to find posts
   let posts = document.querySelectorAll('[role="article"]');
   
   if (posts.length === 0) {
     console.log('No posts found with [role="article"], trying alternative selectors...');
     addLog('No posts found with primary selector, trying alternatives...', 'warning');
     
-    // Try alternative selectors
     posts = document.querySelectorAll('.feed-shared-update-v2');
     
     if (posts.length === 0) {
@@ -470,24 +434,19 @@ async function extractLinkedInPosts() {
   
   posts.forEach((post, index) => {
     try {
-      // Extract post ID (from data-urn attribute)
       const urnId = post.getAttribute('data-urn') || `post-${index}`;
-      // Extract just the numeric ID from URN format (urn:li:activity:6904835503909408768)
       const id = urnId.includes(':') ? urnId.split(':').pop() : urnId;
       
       console.log(`Processing post ${index + 1}, URN: ${urnId}`);
       
-      // Extract poster description
       const descElement = post.querySelector('.update-components-actor__description span[aria-hidden="true"]');
       const posterDescription = descElement ? descElement.textContent.trim() : '';
       
-      // Extract poster name
       const nameElement = post.querySelector('.update-components-actor__title .hoverable-link-text span[dir="ltr"] span[aria-hidden="true"]');
       const postedBy = nameElement ? nameElement.textContent.trim() : '';
       
       console.log(`  Posted by: ${postedBy}`);
       
-      // Extract connection type (1st, 2nd, 3rd+, etc.)
       const connectionElement = post.querySelector('.update-components-actor__supplementary-actor-info span[aria-hidden="true"]');
       let connection = '';
       if (connectionElement) {
@@ -496,25 +455,20 @@ async function extractLinkedInPosts() {
         connection = match ? match[1] : '';
       }
       
-      // Extract poster LinkedIn URL
       const urlElement = post.querySelector('.update-components-actor__meta-link');
       const urlPostedBy = urlElement ? urlElement.getAttribute('href') : '';
       
-      // Extract post age
       const ageElement = post.querySelector('.update-components-actor__sub-description span[aria-hidden="true"]');
       let postAge = '';
       if (ageElement) {
         const text = ageElement.textContent.trim();
-        // Extract time part (e.g., "4w", "2w", "5yr")
         const match = text.match(/(\d+[a-z]+)/);
         postAge = match ? match[1] : text.split('•')[0].trim();
       }
       
-      // Extract post content
       const contentElement = post.querySelector('.update-components-text span[dir="ltr"]');
       let postContent = '';
       if (contentElement) {
-        // Get text content and clean up extra whitespace
         postContent = contentElement.textContent
           .replace(/\s+/g, ' ')
           .trim();
@@ -522,15 +476,12 @@ async function extractLinkedInPosts() {
       
       console.log(`  Content length: ${postContent.length} characters`);
       
-      // Extract post URL from the post's URN
       let postUrl = '';
       if (urnId && urnId.includes(':')) {
-        // Extract numeric ID from URN (e.g., urn:li:activity:7401363182046425088)
         const numericId = urnId.split(':').pop();
         postUrl = `https://www.linkedin.com/feed/update/${urnId.replace('urn:li:', 'urn:li:')}`;
       }
       
-      // Alternative: Look for permalink or share link in the post
       const shareLink = post.querySelector('a[href*="/feed/update/"]');
       if (shareLink && !postUrl) {
         postUrl = shareLink.getAttribute('href');
@@ -539,29 +490,23 @@ async function extractLinkedInPosts() {
         }
       }
       
-      // Extract hashtags/tags (pipe separated)
       const tagElements = post.querySelectorAll('.update-components-text a[href*="keywords"]');
       const postTags = Array.from(tagElements)
         .map(tag => tag.textContent.trim().replace('#', ''))
         .join('|');
       
-      // Extract email addresses (pipe separated)
       const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
       const emails = postContent.match(emailRegex) || [];
-      const emailIds = [...new Set(emails)].join('|'); // Remove duplicates
+      const emailIds = [...new Set(emails)].join('|');
       
-      // Extract phone numbers (pipe separated)
-      // Matches various formats: +1-234-567-8900, (123) 456-7890, 123-456-7890, +91 98765 43210, etc.
       const phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{1,3}[-.\s]?\d{4,5}[-.\s]?\d{4,5}/g;
       const phones = postContent.match(phoneRegex) || [];
-      // Filter out numbers that might be dates or other non-phone numbers
       const validPhones = phones.filter(phone => {
         const digitsOnly = phone.replace(/\D/g, '');
         return digitsOnly.length >= 10 && digitsOnly.length <= 15;
       });
-      const phoneNo = [...new Set(validPhones)].join('|'); // Remove duplicates
+      const phoneNo = [...new Set(validPhones)].join('|');
       
-      // Create post object
       const postData = {
         id,
         postedBy,
@@ -576,7 +521,6 @@ async function extractLinkedInPosts() {
         phoneNo
       };
       
-      // Only add if we have at least some basic data
       if (postedBy || postContent) {
         data.push(postData);
         console.log(`  ✓ Post ${index + 1} extracted successfully`);
@@ -594,13 +538,12 @@ async function extractLinkedInPosts() {
   addLog(`Successfully extracted ${data.length} posts with data`, 'success');
   return data;
 }
-// Execute function
+
 async function executeFunction() {
   console.log('We are in execute function');
   addLog('Execute function called', 'success');
 
   try {
-    // Extract data from LinkedIn posts
     addLog('Starting post extraction...', 'info');
     const data = await extractLinkedInPosts();
     
@@ -611,7 +554,6 @@ async function executeFunction() {
     
     addLog(`Successfully extracted ${data.length} posts`, 'success');
     
-    // Store the extracted data in IndexedDB
     addLog('Storing data in IndexedDB...', 'info');
     await addDataToIndexedDB(data, 'lnPostDb', 'postStore');
     
@@ -624,7 +566,6 @@ async function executeFunction() {
   }
 }
 
-// Delete DB function
 async function deleteDBFunction() {
   console.log('Delete DB function called');
   addLog('Delete DB function called', 'warning');
@@ -632,7 +573,6 @@ async function deleteDBFunction() {
   const dbName = 'lnPostDb';
   const storeName = 'postStore';
   
-  // Confirm before deleting
   const confirmed = confirm('Are you sure you want to delete all posts from the database? This action cannot be undone.');
   
   if (!confirmed) {
@@ -643,7 +583,6 @@ async function deleteDBFunction() {
   try {
     addLog('Deleting all data from IndexedDB...', 'info');
     
-    // Delete all data from IndexedDB
     await deleteAllDataFromIndexedDB(dbName, storeName);
     
     addLog('All posts deleted successfully from database', 'success');
@@ -655,10 +594,9 @@ async function deleteDBFunction() {
   }
 }
 
-// Download function - exports IndexedDB data to CSV
 async function downloadFunction() {
-  console.log('We are in download function');
-  addLog('Download function called', 'info');
+  console.log('We are in download CSV function');
+  addLog('Download CSV function called', 'info');
   
   const dbName = 'lnPostDb';
   const storeName = 'postStore';
@@ -666,7 +604,6 @@ async function downloadFunction() {
   try {
     addLog('Retrieving data from IndexedDB...', 'info');
     
-    // Get all data from IndexedDB
     const data = await getAllDataFromIndexedDB(dbName, storeName);
     
     if (!data || data.length === 0) {
@@ -676,11 +613,9 @@ async function downloadFunction() {
     
     addLog(`Retrieved ${data.length} records`, 'success');
     
-    // Convert to CSV
     addLog('Converting to CSV...', 'info');
     const csv = convertToCSV(data);
     
-    // Create and trigger download
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -701,7 +636,49 @@ async function downloadFunction() {
   }
 }
 
-// Helper function to get all data from IndexedDB
+// New function to download as JSON
+async function downloadJsonFunction() {
+  console.log('We are in download JSON function');
+  addLog('Download JSON function called', 'info');
+  
+  const dbName = 'lnPostDb';
+  const storeName = 'postStore';
+  
+  try {
+    addLog('Retrieving data from IndexedDB...', 'info');
+    
+    const data = await getAllDataFromIndexedDB(dbName, storeName);
+    
+    if (!data || data.length === 0) {
+      addLog('No data found in database', 'warning');
+      return;
+    }
+    
+    addLog(`Retrieved ${data.length} records`, 'success');
+    
+    addLog('Converting to JSON...', 'info');
+    const jsonString = JSON.stringify(data, null, 2);
+    
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `linkedin_posts_${new Date().toISOString().slice(0,10)}.json`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    addLog('JSON download completed successfully', 'success');
+    
+  } catch (error) {
+    console.error('Error in downloadJsonFunction:', error);
+    addLog(`Error: ${error.message}`, 'error');
+  }
+}
+
 async function getAllDataFromIndexedDB(dbName, storeName) {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName);
@@ -713,18 +690,15 @@ async function getAllDataFromIndexedDB(dbName, storeName) {
     request.onsuccess = (event) => {
       const db = event.target.result;
       
-      // Check if object store exists
       if (!db.objectStoreNames.contains(storeName)) {
         db.close();
         reject(new Error(`Object store "${storeName}" does not exist`));
         return;
       }
       
-      // Start a transaction
       const transaction = db.transaction([storeName], 'readonly');
       const objectStore = transaction.objectStore(storeName);
       
-      // Get all records
       const getAllRequest = objectStore.getAll();
       
       getAllRequest.onsuccess = () => {
@@ -740,34 +714,26 @@ async function getAllDataFromIndexedDB(dbName, storeName) {
   });
 }
 
-// Helper function to convert data array to CSV
 function convertToCSV(data) {
   if (!data || data.length === 0) {
     return '';
   }
   
-  // Get headers from the first object
   const headers = Object.keys(data[0]);
   
-  // Create CSV header row
   const csvHeader = headers.map(header => `"${header}"`).join(',');
   
-  // Create CSV data rows
   const csvRows = data.map(row => {
     return headers.map(header => {
       let cell = row[header] || '';
       
-      // Convert to string and escape quotes
       cell = String(cell).replace(/"/g, '""');
       
-      // Wrap in quotes to handle commas and newlines
       return `"${cell}"`;
     }).join(',');
   });
   
-  // Combine header and rows
   return [csvHeader, ...csvRows].join('\n');
 }
 
-// Call the function to attach the div
 attachControlDiv();

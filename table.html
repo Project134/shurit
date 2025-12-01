@@ -7,7 +7,46 @@
 
     <style>
         tr {
-            cursor: pointer; /* Change the cursor to pointer for table rows */
+            cursor: pointer;
+        }
+        
+        /* Prevent horizontal scroll */
+        body {
+            overflow-x: hidden;
+        }
+        
+        #tablesContainer {
+            max-width: 100%;
+        }
+        
+        /* Make table cells wrap text properly */
+        table {
+            width: 100% !important;
+            table-layout: fixed;
+        }
+        
+        table td {
+            word-wrap: break-word;
+            word-break: break-word;
+            white-space: normal;
+            overflow-wrap: break-word;
+            vertical-align: top;
+            padding: 8px !important;
+        }
+        
+        table th {
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        
+        /* Adjust DataTables wrapper to prevent overflow */
+        .dataTables_wrapper {
+            overflow-x: hidden;
+        }
+        
+        /* Make sure no element causes horizontal scroll */
+        * {
+            max-width: 100%;
         }
     </style>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -16,8 +55,14 @@
     <script src="https://cdn.datatables.net/2.2.2/js/dataTables.min.js"></script>
 </head>
 <body>
-    <input type="file" id="fileInput" accept=".json" />
-    <div id="tablesContainer" class="mx-auto p-5"></div>
+    <div class="container-fluid">
+        <div class="row mt-3">
+            <div class="col-12">
+                <input type="file" id="fileInput" accept=".json" class="form-control" style="max-width: 400px;" />
+            </div>
+        </div>
+        <div id="tablesContainer" class="p-3"></div>
+    </div>
     
     <script src="table.js"></script>
 </body>
