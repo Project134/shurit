@@ -662,28 +662,30 @@ function renderTableArea() {
         let pool=[...allData];
         const sections=[];
         for (const cat of categoryMap) {
+            if (!cat.sorts) cat.sorts = [];      // always an array
             const matched=filterData(pool,cat.filters);
             const sorted=sortData(matched,cat.sorts);
-            sections.push({name:cat.name, data:sorted, sorts:cat.sorts||[], cat});
+            sections.push({name:cat.name, data:sorted, cat});
             const ids=new Set(matched.map(r=>r['id']));
             pool=pool.filter(r=>!ids.has(r['id']));
         }
-        if(pool.length) sections.push({name:'other', data:pool, sorts:[], cat:null});
+        if(pool.length) sections.push({name:'other', data:pool, cat:null});
 
         let any=false;
-        sections.forEach(({name,data,sorts,cat})=>{
+        sections.forEach(({name,data,cat})=>{
             if(!data.length) return;
-            // Per-category sort toggle: cycles asc→desc→remove on that cat's sorts array
+            const catSorts = cat ? cat.sorts : [];
+            // Per-category sort toggle: mutates cat.sorts directly
             const catSortToggle = col => {
-                const i = sorts.findIndex(s=>s.column===col);
-                if(i===-1)              sorts.push({column:col, direction:'asc'});
-                else if(sorts[i].direction==='asc') sorts[i].direction='desc';
-                else                    sorts.splice(i,1);
-                // re-render category cards to update sort badges in edit panel
-                renderCategoryCards();
+                if (!cat) return;   // "other" bucket — nothing to persist
+                const i = cat.sorts.findIndex(s => s.column === col);
+                if (i === -1)                            cat.sorts.push({column:col, direction:'asc'});
+                else if (cat.sorts[i].direction==='asc') cat.sorts[i].direction = 'desc';
+                else                                     cat.sorts.splice(i, 1);
+                renderCategoryCards();   // keep edit panel in sync
                 renderTableArea();
             };
-            area.appendChild(buildTable(data, name, sorts, catSortToggle));
+            area.appendChild(buildTable(data, name, catSorts, catSortToggle));
             any=true;
         });
         if(!any) area.innerHTML=`<div class="empty-state"><div class="icon">📭</div><h3>No records</h3></div>`;
