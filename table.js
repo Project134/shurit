@@ -72,11 +72,14 @@ function looksDate(v) {
         || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v);
 }
 function looksNum(v) {
-    const s = String(v).replace(/[₹$,\s+%]/g,'');
-    return s !== '' && /^-?[\d.]+$/.test(s);
+    // Strip known currency/formatting chars then check if remainder is a valid number
+    const s = String(v).replace(/[₹$,\s+%]/g, '').trim();
+    if (s === '' || s === '-') return false;
+    return /^-?(\d+\.?\d*|\.\d+)$/.test(s);
 }
 function detectType(col, data) {
-    const sample = data.map(r=>r[col]).filter(v=>v!==''&&v!=null).slice(0,60);
+    // Use up to 100 non-empty values for better accuracy
+    const sample = data.map(r => r[col]).filter(v => v !== '' && v != null && v !== 'nan' && v !== 'None').slice(0, 100);
     if (!sample.length) return 'text';
     if (sample.every(looksDate)) return 'date';
     if (sample.every(looksNum))  return 'number';
@@ -89,7 +92,11 @@ function detectType(col, data) {
 function parseVal(v, type) {
     if (v==null||v===''||v==='nan'||v==='None') return null;
     const s = String(v).trim(); if (!s) return null;
-    if (type==='number') { const n=+s.replace(/[₹$,\s+%]/g,''); return isNaN(n)?null:n; }
+    if (type==='number') {
+        const cleaned = s.replace(/[₹$,\s+%]/g, '');
+        const n = parseFloat(cleaned);
+        return isNaN(n) ? null : n;
+    }
     if (type==='date')   return parseDate(s);
     return s.toLowerCase();
 }
