@@ -674,18 +674,18 @@ function renderTableArea() {
         let any=false;
         sections.forEach(({name,data,cat})=>{
             if(!data.length) return;
-            const catSorts = cat ? cat.sorts : [];
-            // Per-category sort toggle: mutates cat.sorts directly
+            // Always read cat.sorts directly — never a copy
             const catSortToggle = col => {
-                if (!cat) return;   // "other" bucket — nothing to persist
+                if (!cat) return;
                 const i = cat.sorts.findIndex(s => s.column === col);
                 if (i === -1)                            cat.sorts.push({column:col, direction:'asc'});
                 else if (cat.sorts[i].direction==='asc') cat.sorts[i].direction = 'desc';
                 else                                     cat.sorts.splice(i, 1);
-                renderCategoryCards();   // keep edit panel in sync
                 renderTableArea();
+                // Refresh just the category cards panel so sort badges in edit panels stay in sync
+                renderCategoryCards();
             };
-            area.appendChild(buildTable(data, name, catSorts, catSortToggle));
+            area.appendChild(buildTable(data, name, cat ? cat.sorts : [], catSortToggle));
             any=true;
         });
         if(!any) area.innerHTML=`<div class="empty-state"><div class="icon">📭</div><h3>No records</h3></div>`;
