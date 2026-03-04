@@ -576,7 +576,9 @@ function renderSortStatus() {
 // ═══════════════════════════════════════════════════════════
 //  TABLE BUILDER
 // ═══════════════════════════════════════════════════════════
-function buildTable(data, title, sortsForHeader) {
+function buildTable(data, title, sortsForHeader, onSortClick) {
+    // Default: global sort toggle (single view)
+    if (!onSortClick) onSortClick = toggleSort;
     const frag=document.createDocumentFragment();
     const cols=visibleCols();
     const widths=computeWidths(cols,data);
@@ -618,10 +620,10 @@ function buildTable(data, title, sortsForHeader) {
     const table=document.createElement('table');
     table.innerHTML=`<colgroup>${colgroup}</colgroup><thead><tr>${headerCells}</tr></thead><tbody>${bodyHTML}</tbody>`;
 
-    // Sort on column header click (only changes global sorts in single view)
+    // Sort on column header click — uses provided callback or falls back to global
     table.querySelector('thead').addEventListener('click',e=>{
         const th=e.target.closest('th[data-col]');
-        if(th&&viewMode==='single') toggleSort(th.dataset.col);
+        if(th) onSortClick(th.dataset.col);
     });
 
     // Row click
@@ -662,16 +664,26 @@ function renderTableArea() {
         for (const cat of categoryMap) {
             const matched=filterData(pool,cat.filters);
             const sorted=sortData(matched,cat.sorts);
-            sections.push({name:cat.name,data:sorted,sorts:cat.sorts||[]});
+            sections.push({name:cat.name, data:sorted, sorts:cat.sorts||[], cat});
             const ids=new Set(matched.map(r=>r['id']));
             pool=pool.filter(r=>!ids.has(r['id']));
         }
-        if(pool.length) sections.push({name:'other',data:pool,sorts:[]});
+        if(pool.length) sections.push({name:'other', data:pool, sorts:[], cat:null});
 
         let any=false;
-        sections.forEach(({name,data,sorts})=>{
+        sections.forEach(({name,data,sorts,cat})=>{
             if(!data.length) return;
-            area.appendChild(buildTable(data,name,sorts));
+            // Per-category sort toggle: cycles asc→desc→remove on that cat's sorts array
+            const catSortToggle = col => {
+                const i = sorts.findIndex(s=>s.column===col);
+                if(i===-1)              sorts.push({column:col, direction:'asc'});
+                else if(sorts[i].direction==='asc') sorts[i].direction='desc';
+                else                    sorts.splice(i,1);
+                // re-render category cards to update sort badges in edit panel
+                renderCategoryCards();
+                renderTableArea();
+            };
+            area.appendChild(buildTable(data, name, sorts, catSortToggle));
             any=true;
         });
         if(!any) area.innerHTML=`<div class="empty-state"><div class="icon">📭</div><h3>No records</h3></div>`;
