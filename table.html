@@ -10,6 +10,7 @@
             --bg:            #0f1117;
             --surface:       #181c27;
             --surface2:      #1e2335;
+            --surface3:      #242840;
             --border:        #2a2f45;
             --accent:        #4f8ef7;
             --accent2:       #f7c94f;
@@ -30,6 +31,7 @@
             --bg:            #f5f6fa;
             --surface:       #ffffff;
             --surface2:      #eef0f7;
+            --surface3:      #e4e8f5;
             --border:        #d0d4e8;
             --accent:        #2563eb;
             --accent2:       #d97706;
@@ -46,7 +48,6 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-
         body {
             background: var(--bg);
             color: var(--text);
@@ -56,7 +57,7 @@
             transition: background 0.2s, color 0.2s;
         }
 
-        /* ── Topbar ──────────────────────────────────────────── */
+        /* ── Topbar ─────────────────────────────────────────────── */
         #topbar {
             background: var(--surface);
             border-bottom: 1px solid var(--border);
@@ -70,286 +71,192 @@
             z-index: 200;
             box-shadow: var(--shadow);
         }
-        .brand {
-            font-family: var(--mono);
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--accent);
-            letter-spacing: 0.05em;
-            margin-right: 4px;
-        }
-        #fileNameDisplay {
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-dim);
-            padding: 2px 8px;
-            background: var(--bg);
-            border-radius: 4px;
-            border: 1px solid var(--border);
-            display: none;
-        }
+        .brand { font-family:var(--mono); font-size:13px; font-weight:500; color:var(--accent); letter-spacing:.05em; margin-right:4px; }
+        #fileNameDisplay { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 8px; background:var(--bg); border-radius:4px; border:1px solid var(--border); display:none; }
 
-        /* ── Buttons ─────────────────────────────────────────── */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 5px 11px;
-            border-radius: 5px;
-            border: 1px solid transparent;
-            font-family: var(--sans);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s;
-            white-space: nowrap;
-            background: none;
-            color: var(--text);
-        }
-        .btn-primary { background: var(--accent); color:#fff; border-color:var(--accent); }
-        .btn-primary:hover { opacity:.85; }
-        .btn-outline { border-color: var(--border); }
-        .btn-outline:hover { border-color:var(--accent); color:var(--accent); }
-        .btn-success { background:var(--success); color:#fff; border-color:var(--success); }
-        .btn-danger  { border-color:var(--danger); color:var(--danger); }
-        .btn-danger:hover { background:var(--danger); color:#fff; }
-        .btn-warning { background:var(--accent2); color:#1a1400; border-color:var(--accent2); }
-        .btn-file    { position:relative; overflow:hidden; }
+        /* ── Buttons ─────────────────────────────────────────────── */
+        .btn { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:5px; border:1px solid transparent; font-family:var(--sans); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; white-space:nowrap; background:none; color:var(--text); }
+        .btn-primary  { background:var(--accent);   color:#fff;    border-color:var(--accent);  }
+        .btn-primary:hover  { opacity:.85; }
+        .btn-outline  { border-color:var(--border); }
+        .btn-outline:hover  { border-color:var(--accent); color:var(--accent); }
+        .btn-success  { background:var(--success);  color:#fff;    border-color:var(--success); }
+        .btn-danger   { border-color:var(--danger); color:var(--danger); }
+        .btn-danger:hover   { background:var(--danger); color:#fff; }
+        .btn-warning  { background:var(--accent2);  color:#1a1400; border-color:var(--accent2); }
+        .btn-sm       { padding:3px 8px; font-size:11px; }
+        .btn-file     { position:relative; overflow:hidden; }
         .btn-file input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+        #themeToggle  { margin-left:auto; font-size:15px; padding:4px 9px; border-radius:20px; border:1px solid var(--border); background:var(--surface2); cursor:pointer; transition:all .2s; line-height:1; }
+        #themeToggle:hover { border-color:var(--accent); }
 
-        #themeToggle {
-            margin-left: auto;
-            font-size: 15px;
-            padding: 4px 9px;
-            border-radius: 20px;
-            border: 1px solid var(--border);
-            background: var(--surface2);
-            cursor: pointer;
-            transition: all 0.2s;
-            line-height: 1;
-        }
-        #themeToggle:hover { border-color: var(--accent); }
+        /* ── Cards ───────────────────────────────────────────────── */
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden; box-shadow:var(--shadow); }
+        .card-header { background:var(--surface2); border-bottom:1px solid var(--border); padding:7px 14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .card-header strong { color:var(--text-head); font-size:11px; letter-spacing:.07em; text-transform:uppercase; }
+        .card-body { padding:10px 14px; }
 
-        /* ── Cards ───────────────────────────────────────────── */
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 10px;
-            overflow: hidden;
-            box-shadow: var(--shadow);
+        /* ── Inputs ──────────────────────────────────────────────── */
+        select, input[type=text], input[type=number], input[type=date] {
+            background:var(--bg); border:1px solid var(--border); border-radius:5px;
+            color:var(--text); font-family:var(--sans); font-size:12px;
+            padding:4px 8px; outline:none; transition:border-color .15s;
         }
-        .card-header {
-            background: var(--surface2);
-            border-bottom: 1px solid var(--border);
-            padding: 7px 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .card-header strong {
-            color: var(--text-head);
-            font-size: 11px;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-        }
-        .card-body { padding: 10px 14px; }
+        select:focus, input:focus { border-color:var(--accent); }
+        select option { background:var(--surface2); }
+        .filter-col { width:145px; }
+        .filter-op  { width:140px; }
+        .filter-val { width:145px; }
 
-        /* ── Category pills ──────────────────────────────────── */
-        #categoryPills {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            min-height: 28px;
-            align-items: center;
-        }
-        .cat-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 3px 10px;
-            background: var(--surface2);
-            border: 1px solid var(--accent);
-            border-radius: 20px;
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--accent);
-            cursor: grab;
-            user-select: none;
-            transition: all 0.15s;
-        }
-        .cat-pill:hover { background:var(--accent); color:#fff; }
-        .cat-pill.drag-over { outline:2px dashed var(--accent2); }
-        .cat-pill .remove-pill {
-            background:none; border:none; color:inherit;
-            cursor:pointer; font-size:15px; line-height:1; padding:0; opacity:.6;
-        }
-        .cat-pill .remove-pill:hover { opacity:1; }
-
-        /* ── Column chips ────────────────────────────────────── */
+        /* ── Column chips ────────────────────────────────────────── */
         #colManagerWrap { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
-        .col-chip {
-            display: inline-flex;
-            align-items: center;
-            padding: 3px 9px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-family: var(--mono);
-            border: 1px solid var(--border);
-            background: var(--surface2);
-            color: var(--text);
-            cursor: pointer;
-            transition: all 0.12s;
-            user-select: none;
-        }
+        .col-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:4px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .12s; user-select:none; }
         .col-chip:hover { border-color:var(--accent); color:var(--accent); }
         .col-chip.hidden-col { opacity:.35; text-decoration:line-through; border-style:dashed; }
 
-        /* ── Filters ─────────────────────────────────────────── */
-        .filter-row {
-            display: flex; align-items: center; gap: 7px;
-            margin-bottom: 7px; flex-wrap: wrap;
-        }
-        select, input[type=text], input[type=number], input[type=date] {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 5px;
-            color: var(--text);
-            font-family: var(--sans);
-            font-size: 12px;
-            padding: 4px 8px;
-            outline: none;
-            transition: border-color 0.15s;
-        }
-        select:focus, input:focus { border-color: var(--accent); }
-        select option { background: var(--surface2); }
-        .filter-col { width: 150px; }
-        .filter-op  { width: 145px; }
-        .filter-val { width: 150px; }
-
-        /* ── Sort badges ─────────────────────────────────────── */
+        /* ── Sort badges ─────────────────────────────────────────── */
         #sortStatus { display:flex; flex-wrap:wrap; gap:5px; align-items:center; min-height:26px; }
-        .sort-badge {
+        .sort-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--surface2); border:1px solid var(--accent2); border-radius:4px; font-family:var(--mono); font-size:11px; color:var(--accent2); }
+        .sort-badge button { background:none; border:none; color:var(--accent2); cursor:pointer; font-size:14px; line-height:1; padding:0; opacity:.7; }
+        .sort-badge button:hover { opacity:1; }
+
+        /* ── Category Cards ──────────────────────────────────────── */
+        #catCardsContainer { display:flex; flex-direction:column; gap:8px; }
+
+        .cat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: border-color .15s;
+        }
+        .cat-card:hover { border-color: var(--accent); }
+        .cat-card.drag-over { outline: 2px dashed var(--accent2); }
+
+        .cat-card-header {
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: grab;
+            user-select: none;
+        }
+        .cat-card-header:active { cursor: grabbing; }
+
+        .drag-handle { color:var(--text-dim); font-size:16px; flex-shrink:0; }
+
+        .cat-name-badge {
+            flex: 1;
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--accent);
+        }
+
+        .cat-meta {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: var(--mono);
+        }
+
+        .cat-collapse-btn {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 2px 7px;
+            font-size: 11px;
+            transition: all .15s;
+            flex-shrink: 0;
+        }
+        .cat-collapse-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+        .cat-delete-btn {
+            background:none; border:1px solid var(--border); border-radius:4px;
+            color:var(--text-dim); cursor:pointer; padding:2px 7px; font-size:12px;
+            transition:all .15s; flex-shrink:0;
+        }
+        .cat-delete-btn:hover { border-color:var(--danger); color:var(--danger); }
+
+        .cat-card-body { padding:12px; display:none; }
+        .cat-card-body.expanded { display:block; }
+
+        /* sub-sections inside a category card */
+        .cat-section { margin-bottom:12px; }
+        .cat-section:last-child { margin-bottom:0; }
+        .cat-section-label {
+            font-size:10px;
+            font-family: var(--mono);
+            letter-spacing:.08em;
+            text-transform:uppercase;
+            color:var(--text-dim);
+            margin-bottom:6px;
+            display:flex;
+            align-items:center;
+            gap:8px;
+        }
+
+        /* sort editor within a category */
+        .cat-sort-row { display:flex; flex-wrap:wrap; gap:5px; align-items:center; min-height:24px; }
+        .cat-sort-badge {
             display:inline-flex; align-items:center; gap:4px;
             padding:2px 8px;
-            background:var(--surface2);
+            background:var(--surface3);
             border:1px solid var(--accent2);
             border-radius:4px;
             font-family:var(--mono); font-size:11px; color:var(--accent2);
         }
-        .sort-badge button {
-            background:none; border:none; color:var(--accent2);
-            cursor:pointer; font-size:14px; line-height:1; padding:0; opacity:.7;
-        }
-        .sort-badge button:hover { opacity:1; }
+        .cat-sort-badge button { background:none; border:none; color:var(--accent2); cursor:pointer; font-size:13px; line-height:1; padding:0; opacity:.7; }
+        .cat-sort-badge button:hover { opacity:1; }
+        .cat-sort-dir-btn { cursor:pointer; border:none; background:none; color:var(--accent2); font-size:13px; padding:0; }
 
-        /* ── Save category ───────────────────────────────────── */
+        .add-sort-wrap { display:flex; gap:5px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+        .add-sort-col { width:150px; }
+        .add-sort-dir { width:80px; }
+
+        /* filter row inside category */
+        .cat-filter-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; flex-wrap:wrap; }
+
+        /* ── New category form ───────────────────────────────────── */
         .cat-name-input { width:200px; font-family:var(--mono); }
         #saveCatFeedback { font-family:var(--mono); font-size:11px; color:var(--success); min-width:80px; }
 
-        /* ── Main ────────────────────────────────────────────── */
-        #mainContent { padding: 12px 16px; }
+        /* ── Table area ──────────────────────────────────────────── */
+        #mainContent { padding:12px 16px; }
 
-        .table-section-title {
-            font-family: var(--mono);
-            font-size: 12px;
-            color: var(--accent);
-            padding: 8px 0 5px;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 6px;
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-        }
+        .table-section-title { font-family:var(--mono); font-size:12px; color:var(--accent); padding:8px 0 5px; border-bottom:1px solid var(--border); margin-bottom:6px; display:flex; align-items:baseline; gap:10px; }
         .table-section-title .count { font-size:10px; color:var(--text-dim); }
 
-        /* ── Table ───────────────────────────────────────────── */
-        .table-wrapper {
-            width: 100%;
-            overflow: hidden;          /* no horizontal scroll */
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            margin-bottom: 4px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;       /* proportional fixed widths */
-            font-size: 12px;
-        }
-
-        thead th {
-            background: var(--th-bg);
-            color: var(--text-head);
-            padding: 6px 8px;
-            text-align: left;
-            font-weight: 500;
-            font-size: 11px;
-            letter-spacing: .03em;
-            white-space: nowrap;
-            cursor: pointer;
-            user-select: none;
-            border-bottom: 2px solid var(--border);
-            border-right: 1px solid var(--border);
-            position: sticky;
-            top: 0; z-index: 5;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        thead th:last-child { border-right: none; }
-        thead th:hover { background: var(--surface2); }
-
+        .table-wrapper { width:100%; overflow:hidden; border:1px solid var(--border); border-radius:6px; margin-bottom:4px; }
+        table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+        thead th { background:var(--th-bg); color:var(--text-head); padding:6px 8px; text-align:left; font-weight:500; font-size:11px; letter-spacing:.03em; white-space:nowrap; cursor:pointer; user-select:none; border-bottom:2px solid var(--border); border-right:1px solid var(--border); position:sticky; top:0; z-index:5; overflow:hidden; text-overflow:ellipsis; }
+        thead th:last-child { border-right:none; }
+        thead th:hover { background:var(--surface2); }
         .th-inner { display:flex; align-items:center; gap:3px; overflow:hidden; }
         .th-name  { flex:1; overflow:hidden; text-overflow:ellipsis; }
+        .sort-label { flex-shrink:0; display:inline-flex; align-items:center; gap:2px; padding:1px 4px; background:var(--accent2); color:#1a1400; border-radius:3px; font-family:var(--mono); font-size:9px; font-weight:700; }
 
-        .sort-label {
-            flex-shrink: 0;
-            display:inline-flex; align-items:center; gap:2px;
-            padding:1px 4px;
-            background:var(--accent2); color:#1a1400;
-            border-radius:3px;
-            font-family:var(--mono); font-size:9px; font-weight:700;
-        }
+        tbody tr { border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+        tbody tr:hover   { background:var(--row-hover); }
+        tbody tr.visited { background:var(--visited-bg); }
+        tbody tr.visited:hover { background:var(--visited-hover); }
+        tbody td { padding:5px 8px; border-right:1px solid var(--border); white-space:normal; word-break:break-word; overflow-wrap:break-word; color:var(--text); line-height:1.5; vertical-align:top; }
+        tbody td:last-child { border-right:none; }
 
-        tbody tr {
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            transition: background 0.1s;
-        }
-        tbody tr:hover   { background: var(--row-hover); }
-        tbody tr.visited { background: var(--visited-bg); }
-        tbody tr.visited:hover { background: var(--visited-hover); }
+        .record-count { font-family:var(--mono); font-size:10px; color:var(--text-dim); padding:2px 0 10px; }
 
-        tbody td {
-            padding: 5px 8px;
-            border-right: 1px solid var(--border);
-            white-space: normal;        /* wrap text */
-            word-break: break-word;     /* break long strings cleanly */
-            overflow-wrap: break-word;
-            color: var(--text);
-            line-height: 1.5;
-            vertical-align: top;        /* top-align when rows have different heights */
-        }
-        tbody td:last-child { border-right: none; }
-
-        .record-count {
-            font-family: var(--mono);
-            font-size: 10px;
-            color: var(--text-dim);
-            padding: 2px 0 10px;
-        }
-
-        /* ── Empty state ─────────────────────────────────────── */
         .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
         .empty-state .icon { font-size:46px; margin-bottom:14px; }
         .empty-state h3 { font-size:16px; color:var(--text); margin-bottom:6px; }
 
         .text-dim { color:var(--text-dim); }
         .text-sm  { font-size:11px; }
+        hr.cat-divider { border:none; border-top:1px solid var(--border); margin:10px 0; }
 
-        /* ── Scrollbar ───────────────────────────────────────── */
         ::-webkit-scrollbar { width:5px; height:5px; }
         ::-webkit-scrollbar-track { background:var(--bg); }
         ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
@@ -360,93 +267,85 @@
 
 <div id="topbar">
     <span class="brand">◈ DATA VIEWER</span>
-
-    <label class="btn btn-primary btn-file">
-        📂 Load Data
-        <input type="file" id="dataFileInput" accept=".json">
-    </label>
-
+    <label class="btn btn-primary btn-file">📂 Load Data<input type="file" id="dataFileInput" accept=".json"></label>
     <span id="fileNameDisplay"></span>
-
-    <label class="btn btn-outline btn-file">
-        📁 Load categoryMap
-        <input type="file" id="catMapFileInput" accept=".json">
-    </label>
-
+    <label class="btn btn-outline btn-file">📁 Load categoryMap<input type="file" id="catMapFileInput" accept=".json"></label>
     <button class="btn btn-success" id="applyCategoriesBtn" style="display:none">✦ Apply Categories</button>
     <button class="btn btn-outline" id="singleViewBtn"      style="display:none">☰ Single View</button>
     <button class="btn btn-warning" id="saveCatMapBtn">💾 Save categoryMap</button>
-
     <button id="themeToggle" title="Toggle theme">🌙</button>
 </div>
 
 <div id="mainContent">
 
-    <!-- Category panel -->
+    <!-- ── Category Manager ─────────────────────────────────────── -->
     <div class="card">
         <div class="card-header">
-            <strong>📁 Categories</strong>
-            <span class="text-dim text-sm">Drag to reorder · first match wins · save to persist</span>
+            <strong>📁 Category Manager</strong>
+            <span class="text-dim text-sm">Drag cards to reorder · first match wins · edits apply live</span>
         </div>
         <div class="card-body">
-            <div id="categoryPills">
-                <span class="text-dim text-sm">No categories — load a categoryMap or save one below ↓</span>
+            <!-- Existing category cards -->
+            <div id="catCardsContainer">
+                <span class="text-dim text-sm" id="noCatsMsg">No categories yet — add one below ↓</span>
+            </div>
+
+            <hr class="cat-divider" style="margin-top:14px">
+
+            <!-- New category form -->
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
+                <strong style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-head)">＋ New Category</strong>
+                <input type="text" id="categoryNameInput" class="cat-name-input"
+                       placeholder="Category name…"
+                       onkeydown="if(event.key==='Enter') saveAsCategory()">
+                <button class="btn btn-primary" id="saveAsCategoryBtn">Save from current filters &amp; sorts</button>
+                <span id="saveCatFeedback"></span>
+            </div>
+            <div style="margin-top:5px">
+                <span class="text-dim text-sm">
+                    Captures the active filters, sorts &amp; hidden columns set below ↓
+                </span>
             </div>
         </div>
     </div>
 
-    <!-- Controls (hidden until data loads) -->
+    <!-- ── Controls ─────────────────────────────────────────────── -->
     <div id="controls" style="display:none">
 
         <div class="card">
             <div class="card-header">
                 <strong>🧱 Columns</strong>
-                <button class="btn btn-outline text-sm" id="showAllColsBtn">Show All</button>
-                <span class="text-dim text-sm">Click chip to hide/show · saved in categoryMap</span>
+                <button class="btn btn-outline btn-sm" id="showAllColsBtn">Show All</button>
+                <span class="text-dim text-sm">Click to hide/show · saved in categoryMap</span>
             </div>
             <div class="card-body"><div id="colManagerWrap"></div></div>
         </div>
 
         <div class="card">
             <div class="card-header">
-                <strong>🔍 Filters</strong>
-                <button class="btn btn-outline" id="addFilterBtn">+ Add Filter</button>
-                <button class="btn btn-danger"  id="clearFiltersBtn">✕ Clear</button>
+                <strong>🔍 Active Filters</strong>
+                <button class="btn btn-outline btn-sm" id="addFilterBtn">+ Add</button>
+                <button class="btn btn-danger  btn-sm" id="clearFiltersBtn">✕ Clear</button>
                 <span id="filterCount" class="text-dim text-sm"></span>
             </div>
             <div class="card-body">
-                <div id="filtersContainer">
-                    <span class="text-dim text-sm">No filters. Click "+ Add Filter" to start.</span>
-                </div>
+                <div id="filtersContainer"><span class="text-dim text-sm">No filters.</span></div>
             </div>
         </div>
 
         <div class="card">
             <div class="card-header">
-                <strong>↕ Sort</strong>
-                <button class="btn btn-outline" id="clearSortsBtn">✕ Clear</button>
+                <strong>↕ Active Sort</strong>
+                <button class="btn btn-outline btn-sm" id="clearSortsBtn">✕ Clear</button>
             </div>
             <div class="card-body">
-                <div id="sortStatus">
-                    <span class="text-dim text-sm">Click column headers to sort. Multiple columns supported.</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header"><strong>💾 Save as Category</strong></div>
-            <div class="card-body" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <input type="text" id="categoryNameInput" class="cat-name-input"
-                       placeholder="Category name…"
-                       onkeydown="if(event.key==='Enter') saveAsCategory()">
-                <button class="btn btn-primary" id="saveAsCategoryBtn">Save</button>
-                <span id="saveCatFeedback"></span>
-                <span class="text-dim text-sm">Captures filters · sorts · hidden columns</span>
+                <div id="sortStatus"><span class="text-dim text-sm">Click column headers to sort.</span></div>
             </div>
         </div>
 
     </div>
 
+    <!-- ── Table Area ────────────────────────────────────────────── -->
     <div id="tableArea">
         <div class="empty-state">
             <div class="icon">◈</div>
@@ -456,7 +355,6 @@
     </div>
 
 </div>
-
 <script src="table.js"></script>
 </body>
 </html>
