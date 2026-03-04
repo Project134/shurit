@@ -314,10 +314,12 @@ function esc(s) {
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function buildTable(data, title) {
-    const frag  = document.createDocumentFragment();
+function buildTable(data, title, sortsForHeader) {
+    const frag   = document.createDocumentFragment();
     const cols   = visibleCols();
     const widths = computeWidths(cols, data);
+    // Use passed-in sorts for header badges (category view) or fall back to global
+    const headerSorts = sortsForHeader || activeSorts;
 
     // Section title
     if (title) {
@@ -335,8 +337,8 @@ function buildTable(data, title) {
 
     // header cells
     const headerCells = cols.map((col, i) => {
-        const si  = activeSorts.findIndex(s => s.column === col);
-        const dir = si >= 0 ? activeSorts[si].direction : null;
+        const si  = headerSorts.findIndex(s => s.column === col);
+        const dir = si >= 0 ? headerSorts[si].direction : null;
         const badge = si >= 0
             ? `<span class="sort-label">s${si+1}${dir==='asc'?'↑':'↓'}</span>` : '';
         return `<th data-col="${esc(col)}" style="width:${widths[i]}">
@@ -423,16 +425,16 @@ function renderTableArea() {
         for (const cat of categoryMap) {
             const matched = filterData(pool, cat.filters);
             const sorted  = sortData(matched, cat.sorts);
-            sections.push({ name: cat.name, data: sorted });
+            sections.push({ name: cat.name, data: sorted, sorts: cat.sorts || [] });
             const ids = new Set(matched.map(r => r['id']));
             pool = pool.filter(r => !ids.has(r['id']));
         }
-        if (pool.length) sections.push({ name: 'other', data: pool });
+        if (pool.length) sections.push({ name: 'other', data: pool, sorts: [] });
 
         let any = false;
-        sections.forEach(({ name, data }) => {
+        sections.forEach(({ name, data, sorts }) => {
             if (!data.length) return;
-            area.appendChild(buildTable(data, name));
+            area.appendChild(buildTable(data, name, sorts));
             any = true;
         });
         if (!any) area.innerHTML = `<div class="empty-state"><div class="icon">📭</div><h3>No records</h3></div>`;
