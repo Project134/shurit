@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg:            #0f1117;
+        --surface:       #181c27;
+        --surface2:      #1e2335;
+        --surface3:      #242840;
+        --border:        #2a2f45;
+        --accent:        #4f8ef7;
+        --accent2:       #f7c94f;
+        --danger:        #f75f5f;
+        --success:       #4fcf8e;
+        --text:          #d4d8e8;
+        --text-dim:      #7880a0;
+        --text-head:     #ffffff;
+        --th-bg:         #1e2335;
+        --visited-bg:    #0d2b1e;
+        --visited-hover: #112e21;
+        --row-hover:     #1e2335;
+        --shadow:        0 2px 12px rgba(0,0,0,0.4);
+        --mono: 'JetBrains Mono', monospace;
+        --sans: 'DM Sans', sans-serif;
+    }
+    [data-theme="light"] {
+        --bg:            #f5f6fa;
+        --surface:       #ffffff;
+        --surface2:      #eef0f7;
+        --surface3:      #e4e8f5;
+        --border:        #d0d4e8;
+        --accent:        #2563eb;
+        --accent2:       #d97706;
+        --danger:        #dc2626;
+        --success:       #16a34a;
+        --text:          #1e2340;
+        --text-dim:      #6b7280;
+        --text-head:     #0f172a;
+        --th-bg:         #eef0f7;
+        --visited-bg:    #dcfce7;
+        --visited-hover: #bbf7d0;
+        --row-hover:     #f0f3ff;
+        --shadow:        0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 13px;
+        min-height: 100vh;
+        transition: background 0.2s, color 0.2s;
+    }
+
+    /* ── Topbar ─────────────────────────────────────────────── */
+    #topbar {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 8px 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 200;
+        box-shadow: var(--shadow);
+    }
+    .brand { font-family:var(--mono); font-size:13px; font-weight:500; color:var(--accent); letter-spacing:.05em; margin-right:4px; }
+    #fileNameDisplay { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 8px; background:var(--bg); border-radius:4px; border:1px solid var(--border); display:none; }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:5px; border:1px solid transparent; font-family:var(--sans); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; white-space:nowrap; background:none; color:var(--text); }
+    .btn-primary  { background:var(--accent);   color:#fff;    border-color:var(--accent);  }
+    .btn-primary:hover  { opacity:.85; }
+    .btn-outline  { border-color:var(--border); }
+    .btn-outline:hover  { border-color:var(--accent); color:var(--accent); }
+    .btn-danger   { border-color:var(--danger); color:var(--danger); }
+    .btn-danger:hover   { background:var(--danger); color:#fff; }
+    .btn-sm       { padding:3px 8px; font-size:11px; }
+    .btn-file     { position:relative; overflow:hidden; }
+    .btn-file input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    #themeToggle  { margin-left:auto; font-size:15px; padding:4px 9px; border-radius:20px; border:1px solid var(--border); background:var(--surface2); cursor:pointer; transition:all .2s; line-height:1; }
+    #themeToggle:hover { border-color:var(--accent); }
+
+    /* ── Cards ───────────────────────────────────────────────── */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden; box-shadow:var(--shadow); }
+    .card-header { background:var(--surface2); border-bottom:1px solid var(--border); padding:7px 14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .card-header strong { color:var(--text-head); font-size:11px; letter-spacing:.07em; text-transform:uppercase; }
+    .card-body { padding:10px 14px; }
+
+    /* ── Column chips ────────────────────────────────────────── */
+    #colManagerWrap { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+    .col-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:4px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .12s; user-select:none; }
+    .col-chip:hover { border-color:var(--accent); color:var(--accent); }
+    .col-chip.hidden-col { opacity:.35; text-decoration:line-through; border-style:dashed; }
+
+    /* ── Category tabs ───────────────────────────────────────── */
+    #tabBarWrap { margin-bottom: 4px; }
+    .tab-bar { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; border-bottom:1px solid var(--border); padding-top:4px; }
+    .tab-btn {
+        display:inline-flex; align-items:center; gap:7px;
+        padding:7px 14px; border-radius:7px 7px 0 0;
+        border:1px solid var(--border); border-bottom:none;
+        background:var(--surface2); color:var(--text-dim);
+        font-family:var(--mono); font-size:12px; cursor:pointer;
+        transition:all .15s; position:relative; top:1px;
+    }
+    .tab-btn:hover { color:var(--text); border-color:var(--accent); }
+    .tab-btn.active { background:var(--surface); color:var(--accent); border-color:var(--accent); border-bottom:1px solid var(--surface); font-weight:500; }
+    .tab-close { font-size:13px; opacity:.55; line-height:1; padding:0 1px; border-radius:3px; }
+    .tab-close:hover { opacity:1; color:var(--danger); }
+
+    .cat-hint { padding:10px 14px; background:var(--surface); border:1px dashed var(--border); border-radius:8px; margin:10px 0; font-size:12px; color:var(--text-dim); line-height:1.6; }
+    .cat-hint strong { color:var(--text-head); }
+    .cat-hint pre { font-family:var(--mono); font-size:11px; color:var(--text); background:var(--bg); padding:8px 10px; border-radius:5px; border:1px solid var(--border); margin-top:6px; white-space:pre-wrap; word-break:break-word; }
+    .cat-hint code { font-family:var(--mono); background:var(--surface2); padding:1px 5px; border-radius:3px; color:var(--accent); }
+
+    .cat-error-banner { background:rgba(247,95,95,.08); border:1px solid var(--danger); border-radius:6px; padding:8px 12px; margin:10px 0; font-family:var(--mono); font-size:11px; color:var(--danger); }
+    .cat-error-banner ul { margin:4px 0 0 18px; }
+
+    /* ── SQL preview strip ───────────────────────────────────── */
+    .sql-preview { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:6px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:5px; font-family:var(--mono); font-size:11px; color:var(--text-dim); overflow-x:auto; white-space:nowrap; }
+    .sql-preview .sql-label { flex-shrink:0; padding:1px 6px; background:var(--accent); color:#fff; border-radius:3px; font-size:9px; font-weight:700; letter-spacing:.05em; }
+    .sql-preview code { color:var(--text); }
+
+    /* ── Table area ──────────────────────────────────────────── */
+    #mainContent { padding:12px 16px; }
+
+    .table-section-title { font-family:var(--mono); font-size:12px; color:var(--accent); padding:10px 0 6px; margin-bottom:6px; display:flex; align-items:baseline; gap:10px; }
+    .table-section-title .count { font-size:10px; color:var(--text-dim); }
+
+    .table-wrapper { width:100%; overflow:hidden; border:1px solid var(--border); border-radius:6px; margin-bottom:4px; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+    thead th { background:var(--th-bg); color:var(--text-head); padding:6px 8px; text-align:left; font-weight:500; font-size:11px; letter-spacing:.03em; white-space:nowrap; cursor:pointer; user-select:none; border-bottom:2px solid var(--border); border-right:1px solid var(--border); position:sticky; top:0; z-index:5; overflow:hidden; text-overflow:ellipsis; }
+    thead th:last-child { border-right:none; }
+    thead th:hover { background:var(--surface2); }
+    .th-inner { display:flex; align-items:center; gap:3px; overflow:hidden; }
+    .th-name  { flex:1; overflow:hidden; text-overflow:ellipsis; }
+    .sort-label { flex-shrink:0; display:inline-flex; align-items:center; gap:2px; padding:1px 4px; background:var(--accent2); color:#1a1400; border-radius:3px; font-family:var(--mono); font-size:9px; font-weight:700; }
+
+    tbody tr { border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+    tbody tr:hover   { background:var(--row-hover); }
+    tbody tr.visited { background:var(--visited-bg); }
+    tbody tr.visited:hover { background:var(--visited-hover); }
+    tbody td { padding:5px 8px; border-right:1px solid var(--border); white-space:normal; word-break:break-word; overflow-wrap:break-word; color:var(--text); line-height:1.5; vertical-align:top; }
+    tbody td:last-child { border-right:none; }
+
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+    .empty-state .icon { font-size:46px; margin-bottom:14px; }
+    .empty-state h3 { font-size:16px; color:var(--text); margin-bottom:6px; }
+
+    .text-dim { color:var(--text-dim); }
+    .text-sm  { font-size:11px; }
+
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:var(--bg); }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+    <span class="brand">◈ DATA VIEWER</span>
+    <label class="btn btn-primary btn-file">📂 Load Data<input type="file" id="dataFileInput" accept=".json"></label>
+    <span id="fileNameDisplay"></span>
+    <label class="btn btn-outline btn-file" id="catFileBtn" style="display:none"
+           title="Text file: one category per line, e.g. High Priority - select * from data where priority = 'High' order by due_date asc">
+           📄 Load Categories (SQL)<input type="file" id="catFileInput" accept=".txt,.sql,text/plain"></label>
+    <button class="btn btn-danger" id="clearCatBtn" style="display:none">✕ Clear Categories</button>
+    <button id="themeToggle" title="Toggle theme">🌙</button>
+</div>
+
+<div id="mainContent">
+
+    <!-- ── Controls ─────────────────────────────────────────────── -->
+    <div id="controls" style="display:none">
+        <div class="card">
+            <div class="card-header">
+                <strong>🧱 Columns</strong>
+                <button class="btn btn-outline btn-sm" id="showAllColsBtn">Show All</button>
+                <span class="text-dim text-sm">Click to hide/show</span>
+            </div>
+            <div class="card-body"><div id="colManagerWrap"></div></div>
+        </div>
+    </div>
+
+    <!-- ── Category parse errors/warnings ─────────────────────────── -->
+    <div id="catErrorBanner" class="cat-error-banner" style="display:none"></div>
+
+    <!-- ── Tabs ─────────────────────────────────────────────────── -->
+    <div id="tabBarWrap" style="display:none">
+        <div id="tabBar" class="tab-bar"></div>
+        <div id="catHint" class="cat-hint">
+            <strong>No categories loaded yet</strong> — showing the <code>All</code> tab.
+            Load a text file to split the data into tabs, one per line:
+            <pre>High Priority - select * from data where priority = 'High' and status != 'Closed' order by due_date asc
+Recent - created_at >= '2026-01-01'
+Needs Review - select * from data where (status = 'Pending' or status = 'Review') and owner is not null</pre>
+            Supported in the <code>where</code> part: <code>=  !=  &lt;&gt;  &lt;  &lt;=  &gt;  &gt;=</code>,
+            <code>LIKE '%text%'</code>, <code>IN (a, b, c)</code>, <code>BETWEEN x AND y</code>,
+            <code>IS [NOT] NULL</code>, and <code>AND / OR / NOT</code> with <strong>parentheses</strong>.
+            The <code>select ... from ...</code> and <code>order by</code> parts are optional — you can also just write the condition directly after the dash.
+        </div>
+    </div>
+
+    <!-- ── Table Area ────────────────────────────────────────────── -->
+    <div id="tableArea">
+        <div class="empty-state">
+            <div class="icon">◈</div>
+            <h3>No data loaded</h3>
+            <p class="text-dim">Click "Load Data" to open a JSON file</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+let allData        = [];
+let displayColumns  = [];
+let hiddenColumns  = new Set();
+let columnTypes    = {};
+let colKeyMap      = {};   // lowercase column name -> actual key
+let fileName       = '';
+let urlColumn      = 'url';
+let clickedItems   = new Set(JSON.parse(localStorage.getItem('clickedItems') || '[]'));
+
+// Tabs: [{ key, label, raw, whereAst, selectCols, sorts }]
+let tabs           = [makeAllTab()];
+let activeTabKey   = 'all';
+let categoryErrors = [];
+
+function makeAllTab() {
+    return { key:'all', label:'All', raw:null, whereAst:null, selectCols:null, sorts:[] };
+}
+
+// ── Theme ────────────────────────────────────────────────
+let isDark = true;
+const themeBtn = document.getElementById('themeToggle');
+function applyTheme() {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    themeBtn.textContent = isDark ? '🌙' : '☀️';
+}
+themeBtn.addEventListener('click', () => { isDark = !isDark; applyTheme(); });
+applyTheme();
+
+// ═══════════════════════════════════════════════════════════
+//  DATE PARSING
+// ═══════════════════════════════════════════════════════════
+const MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+function parseDate(s) {
+    if (!s) return null;
+    s = String(s).trim();
+    const m1 = s.match(/^([A-Za-z]{3})[a-z]*\s+(\d{1,2}),?\s*(\d{4})$/);
+    if (m1 && MON[m1[1]] !== undefined) return new Date(+m1[3], MON[m1[1]], +m1[2]);
+    const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+    const m3 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m3) return new Date(+m3[3], +m3[2]-1, +m3[1]);
+    return null;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TYPE DETECTION
+// ═══════════════════════════════════════════════════════════
+function looksDate(v) {
+    v = String(v).trim();
+    return /^[A-Za-z]{3}[a-z]*\s+\d{1,2},?\s*\d{4}$/.test(v)
+        || /^\d{4}-\d{2}-\d{2}$/.test(v)
+        || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v);
+}
+function looksNum(v) {
+    const s = String(v).replace(/[₹$,\s+%]/g,'');
+    return s !== '' && /^-?[\d.]+$/.test(s);
+}
+function detectType(col, data) {
+    const sample = data.map(r=>r[col]).filter(v=>v!==''&&v!=null).slice(0,60);
+    if (!sample.length) return 'text';
+    if (sample.every(looksDate)) return 'date';
+    if (sample.every(looksNum))  return 'number';
+    return 'text';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  VALUE PARSING
+// ═══════════════════════════════════════════════════════════
+function parseVal(v, type) {
+    if (v==null||v===''||v==='nan'||v==='None') return null;
+    const s = String(v).trim(); if (!s) return null;
+    if (type==='number') { const n=+s.replace(/[₹$,\s+%]/g,''); return isNaN(n)?null:n; }
+    if (type==='date')   return parseDate(s);
+    return s.toLowerCase();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CONDITION TEST ENGINE (used by the SQL WHERE evaluator)
+// ═══════════════════════════════════════════════════════════
+function testFilter(rv, op, fv, type) {
+    if (op==='is_empty')     return !rv||String(rv).trim()==='';
+    if (op==='is_not_empty') return !!(rv&&String(rv).trim()!=='');
+    if (fv==null) return true;
+    const r=parseVal(rv,type), f=parseVal(fv,type);
+    if (f===null) return true; if (r===null) return false;
+    const cmp=(a,b)=>{
+        if (a instanceof Date&&b instanceof Date) return a.getTime()-b.getTime();
+        if (typeof a==='number') return a-b;
+        return String(a).localeCompare(String(b));
+    };
+    switch(op){
+        case 'contains':     return String(r).includes(String(f));
+        case 'not_contains': return !String(r).includes(String(f));
+        case 'starts_with':  return String(r).startsWith(String(f));
+        case 'ends_with':    return String(r).endsWith(String(f));
+        case 'eq':           return cmp(r,f)===0;
+        case 'neq':          return cmp(r,f)!==0;
+        case 'lt':           return cmp(r,f)<0;
+        case 'lte':          return cmp(r,f)<=0;
+        case 'gt':           return cmp(r,f)>0;
+        case 'gte':          return cmp(r,f)>=0;
+        default: return true;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SORT ENGINE
+// ═══════════════════════════════════════════════════════════
+function sortData(data, sorts) {
+    if (!sorts||!sorts.length) return [...data];
+    return [...data].sort((a,b)=>{
+        for (const s of sorts) {
+            const type=columnTypes[s.column]||'text';
+            const av=parseVal(a[s.column],type), bv=parseVal(b[s.column],type);
+            let c=0;
+            if (av===null&&bv===null) continue;
+            else if (av===null) c=1; else if (bv===null) c=-1;
+            else if (av instanceof Date) c=av.getTime()-bv.getTime();
+            else if (typeof av==='number') c=av-bv;
+            else c=String(av).localeCompare(String(bv));
+            if (c!==0) return s.direction==='asc'?c:-c;
+        }
+        return 0;
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  VISIBLE COLUMNS
+// ═══════════════════════════════════════════════════════════
+function visibleCols() { return displayColumns.filter(c=>!hiddenColumns.has(c)); }
+
+// ═══════════════════════════════════════════════════════════
+//  COLUMN WIDTH CALCULATION
+// ═══════════════════════════════════════════════════════════
+const CHAR_W=7.4, PAD_PX=18, MIN_PX=50, MAX_PX=280;
+function computeWidths(cols, data) {
+    const sample=data.slice(0,100);
+    const raw=cols.map(col=>{
+        let mx=col.length+2;
+        for (const row of sample) { const l=String(row[col]??'').length; if(l>mx)mx=l; }
+        return Math.max(MIN_PX,Math.min(MAX_PX,mx*CHAR_W+PAD_PX));
+    });
+    const total=raw.reduce((a,b)=>a+b,0)||1;
+    return raw.map(px=>`${(px/total*100).toFixed(3)}%`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  URL COLUMN DETECTION
+// ═══════════════════════════════════════════════════════════
+function detectUrlColumn(data) {
+    if (!data.length) return 'url';
+    const first=data[0];
+    for (const n of ['url','job_url','link','href']) if(n in first) return n;
+    for (const k of Object.keys(first)) if(String(first[k]||'').startsWith('http')) return k;
+    return 'url';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ESC HELPER
+// ═══════════════════════════════════════════════════════════
+function esc(s) {
+    return String(s==null?'':s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SQL WHERE-CLAUSE TOKENIZER
+// ═══════════════════════════════════════════════════════════
+function tokenizeWhere(s) {
+    const tokens = [];
+    let i = 0;
+    const n = s.length;
+    while (i < n) {
+        const c = s[i];
+        if (/\s/.test(c)) { i++; continue; }
+        if (c === "'") {
+            let j = i+1, buf='';
+            while (j < n) {
+                if (s[j] === "'") {
+                    if (s[j+1] === "'") { buf+="'"; j+=2; continue; }
+                    j++; break;
+                }
+                buf += s[j]; j++;
+            }
+            tokens.push({type:'string', value: buf});
+            i = j; continue;
+        }
+        if (/[0-9]/.test(c) || (c==='-' && /[0-9]/.test(s[i+1]||'') && (!tokens.length || ['op','lparen','comma'].includes(tokens[tokens.length-1].type) || (tokens[tokens.length-1].type==='word' && ['AND','OR','NOT','BETWEEN'].includes(tokens[tokens.length-1].value.toUpperCase()))))) {
+            let j=i+1;
+            while (j<n && /[0-9.]/.test(s[j])) j++;
+            tokens.push({type:'number', value: parseFloat(s.slice(i,j))});
+            i=j; continue;
+        }
+        if (/[A-Za-z_]/.test(c)) {
+            let j=i+1;
+            while (j<n && /[A-Za-z0-9_.]/.test(s[j])) j++;
+            tokens.push({type:'word', value: s.slice(i,j)});
+            i=j; continue;
+        }
+        if (c === '"' || c === '`') {
+            const q = c; let j = i+1, buf='';
+            while (j<n && s[j]!==q) { buf+=s[j]; j++; }
+            tokens.push({type:'word', value: buf});
+            i = j+1; continue;
+        }
+        if (c === '(') { tokens.push({type:'lparen'}); i++; continue; }
+        if (c === ')') { tokens.push({type:'rparen'}); i++; continue; }
+        if (c === ',') { tokens.push({type:'comma'});  i++; continue; }
+        if (c === '!' && s[i+1]==='=') { tokens.push({type:'op',value:'!='}); i+=2; continue; }
+        if (c === '<' && s[i+1]==='>') { tokens.push({type:'op',value:'<>'}); i+=2; continue; }
+        if (c === '<' && s[i+1]==='=') { tokens.push({type:'op',value:'<='}); i+=2; continue; }
+        if (c === '>' && s[i+1]==='=') { tokens.push({type:'op',value:'>='}); i+=2; continue; }
+        if (c === '=') { tokens.push({type:'op',value:'='}); i++; continue; }
+        if (c === '<') { tokens.push({type:'op',value:'<'}); i++; continue; }
+        if (c === '>') { tokens.push({type:'op',value:'>'}); i++; continue; }
+        throw new Error(`Unexpected character "${c}" in WHERE clause`);
+    }
+    return tokens;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SQL WHERE-CLAUSE PARSER  (recursive descent)
+//  Grammar:
+//    expr   := or
+//    or     := and (OR and)*
+//    and    := not (AND not)*
+//    not    := NOT not | primary
+//    primary:= '(' expr ')' | condition
+//  Parentheses are fully supported — parsePrimary handles '(' expr ')'
+// ═══════════════════════════════════════════════════════════
+function parseWhere(tokens) {
+    let pos = 0;
+    function peek(){ return tokens[pos]; }
+    function next(){ return tokens[pos++]; }
+    function isWord(t,w){ return t && t.type==='word' && t.value.toUpperCase()===w; }
+    function expectWord(w) {
+        const t = next();
+        if (!isWord(t,w)) throw new Error(`Expected ${w}`);
+    }
+    function parseExpr() { return parseOr(); }
+    function parseOr() {
+        let node = parseAnd();
+        while (isWord(peek(),'OR')) { next(); node = {type:'or', left:node, right:parseAnd()}; }
+        return node;
+    }
+    function parseAnd() {
+        let node = parseNot();
+        while (isWord(peek(),'AND')) { next(); node = {type:'and', left:node, right:parseNot()}; }
+        return node;
+    }
+    function parseNot() {
+        if (isWord(peek(),'NOT')) { next(); return {type:'not', node: parseNot()}; }
+        return parsePrimary();
+    }
+    function parsePrimary() {
+        // ── PARENTHESES SUPPORT ──────────────────────────────
+        if (peek() && peek().type==='lparen') {
+            next();                       // consume '('
+            const node = parseExpr();     // parse full expression inside
+            if (!peek() || peek().type!=='rparen') throw new Error('Expected ")"');
+            next();                       // consume ')'
+            return node;                  // return the grouped sub-tree as-is
+        }
+        // ── END PARENTHESES SUPPORT ─────────────────────────
+        return parseCondition();
+    }
+    function literalOf(t) {
+        if (!t) throw new Error('Unexpected end of condition');
+        if (t.type==='string' || t.type==='number') return t.value;
+        if (t.type==='word') return t.value; // bare word literal (e.g. true/false/unquoted token)
+        throw new Error('Expected a value');
+    }
+    function parseCondition() {
+        const colTok = next();
+        if (!colTok || colTok.type !== 'word') throw new Error('Expected a column name');
+        const column = colTok.value;
+        let t = peek();
+
+        if (isWord(t,'NOT')) {
+            next();
+            if (isWord(peek(),'LIKE'))    { next(); return {type:'not', node:{type:'like', column, pattern: literalOf(next())}}; }
+            if (isWord(peek(),'IN'))      { return {type:'not', node: parseInClause(column)}; }
+            if (isWord(peek(),'BETWEEN')) { return {type:'not', node: parseBetweenClause(column)}; }
+            throw new Error('Expected LIKE, IN or BETWEEN after NOT');
+        }
+        if (isWord(t,'LIKE')) { next(); return {type:'like', column, pattern: literalOf(next())}; }
+        if (isWord(t,'IN'))   { return parseInClause(column); }
+        if (isWord(t,'BETWEEN')) { return parseBetweenClause(column); }
+        if (isWord(t,'IS')) {
+            next();
+            let isNot = false;
+            if (isWord(peek(),'NOT')) { isNot=true; next(); }
+            expectWord('NULL');
+            return {type:'null', column, isNot};
+        }
+        if (t && t.type==='op') {
+            next();
+            const value = literalOf(next());
+            return {type:'cmp', column, op:t.value, value};
+        }
+        throw new Error(`Unexpected token after column "${column}"`);
+    }
+    function parseInClause(column) {
+        expectWord('IN');
+        if (!peek() || peek().type!=='lparen') throw new Error('Expected "(" after IN');
+        next();
+        const values=[];
+        while (true) {
+            values.push(literalOf(next()));
+            if (peek() && peek().type==='comma') { next(); continue; }
+            break;
+        }
+        if (!peek() || peek().type!=='rparen') throw new Error('Expected ")" to close IN list');
+        next();
+        return {type:'in', column, values};
+    }
+    function parseBetweenClause(column) {
+        expectWord('BETWEEN');
+        const lo = literalOf(next());
+        expectWord('AND');
+        const hi = literalOf(next());
+        return {type:'between', column, lo, hi};
+    }
+
+    const result = parseExpr();
+    if (pos !== tokens.length) throw new Error('Unexpected extra tokens in WHERE clause');
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LIKE PATTERN → OPERATOR
+// ═══════════════════════════════════════════════════════════
+function likeToOp(pattern) {
+    const startsPct = pattern.startsWith('%');
+    const endsPct   = pattern.endsWith('%');
+    let val = pattern;
+    if (startsPct) val = val.slice(1);
+    if (endsPct)   val = val.slice(0,-1);
+    if (startsPct && endsPct) return {op:'contains',    value: val};
+    if (endsPct)              return {op:'starts_with', value: val};
+    if (startsPct)            return {op:'ends_with',   value: val};
+    return {op:'eq', value: val};
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WHERE-CLAUSE AST EVALUATOR
+// ═══════════════════════════════════════════════════════════
+const CMP_OP_MAP = {'=':'eq','!=':'neq','<>':'neq','<':'lt','<=':'lte','>':'gt','>=':'gte'};
+function evalWhere(node, row, types) {
+    if (!node) return true;
+    switch (node.type) {
+        case 'and': return evalWhere(node.left,row,types) && evalWhere(node.right,row,types);
+        case 'or':  return evalWhere(node.left,row,types) || evalWhere(node.right,row,types);
+        case 'not': return !evalWhere(node.node,row,types);
+        case 'null': {
+            const empty = !row[node.column] || String(row[node.column]).trim()==='';
+            return node.isNot ? !empty : empty;
+        }
+        case 'cmp': {
+            const type = types[node.column]||'text';
+            return testFilter(row[node.column], CMP_OP_MAP[node.op]||'eq', node.value, type);
+        }
+        case 'like': {
+            const type = types[node.column]||'text';
+            const {op, value} = likeToOp(String(node.pattern));
+            return testFilter(row[node.column], op, value, type);
+        }
+        case 'in': {
+            const type = types[node.column]||'text';
+            return node.values.some(v=>testFilter(row[node.column],'eq',v,type));
+        }
+        case 'between': {
+            const type = types[node.column]||'text';
+            return testFilter(row[node.column],'gte',node.lo,type) && testFilter(row[node.column],'lte',node.hi,type);
+        }
+        default: return true;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COLUMN NAME RESOLUTION
+// ═══════════════════════════════════════════════════════════
+function resolveColumnName(name) {
+    if (!name) return name;
+    const stripped = name.includes('.') ? name.slice(name.lastIndexOf('.')+1) : name;
+    return colKeyMap[stripped.toLowerCase()] || stripped;
+}
+function resolveAstColumns(node, warnings, catName) {
+    if (!node) return node;
+    if (node.type==='and' || node.type==='or') {
+        resolveAstColumns(node.left, warnings, catName);
+        resolveAstColumns(node.right, warnings, catName);
+        return node;
+    }
+    if (node.type==='not') { resolveAstColumns(node.node, warnings, catName); return node; }
+    if (node.column) {
+        const stripped = node.column.includes('.') ? node.column.slice(node.column.lastIndexOf('.')+1) : node.column;
+        const key = stripped.toLowerCase();
+        if (colKeyMap[key]) node.column = colKeyMap[key];
+        else { node.column = stripped; warnings.push(`⚠ "${catName}": unknown column "${stripped}"`); }
+    }
+    return node;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CATEGORY LINE PARSER
+//  "<name> - select <cols|*> from <anything> where <cond> [order by <cols>]"
+//  or the shorthand: "<name> - <condition> [order by <cols>]"
+// ═══════════════════════════════════════════════════════════
+function parseCategoryLine(line, lineNo, warnings) {
+    let name, stmt;
+    const sqlSep = line.match(/^(.*?)\s+-\s+(select[\s\S]*)$/i);
+    if (sqlSep) {
+        name = sqlSep[1].trim();
+        stmt = sqlSep[2].trim();
+    } else {
+        const generic = line.match(/^(.*?)\s+-\s+([\s\S]+)$/) || line.match(/^(.*?):\s*([\s\S]+)$/);
+        if (!generic) throw new Error(`Could not find "<name> - <condition>" in: ${line}`);
+        name = generic[1].trim();
+        stmt = generic[2].trim();
+    }
+    if (!name) throw new Error('Missing category name');
+    if (!stmt) throw new Error('Missing condition / SQL statement');
+
+    let selectColsRaw = null, whereText = stmt, orderByText = null;
+    const full = stmt.match(/^select\s+([\s\S]*?)\s+from\s+([\s\S]*?)(?:\s+where\s+([\s\S]*?))?(?:\s+order\s+by\s+([\s\S]*))?$/i);
+    if (full) {
+        const selPart = full[1].trim();
+        if (selPart && selPart !== '*') {
+            selectColsRaw = selPart.split(',').map(s=>s.trim().replace(/^["`]|["`]$/g,'')).filter(Boolean);
+        }
+        whereText   = (full[3]||'').trim();
+        orderByText = (full[4]||'').trim() || null;
+    } else {
+        const ob = stmt.match(/^([\s\S]*?)\s+order\s+by\s+([\s\S]*)$/i);
+        if (ob) { whereText = ob[1].trim(); orderByText = ob[2].trim(); }
+    }
+    whereText = whereText.replace(/;\s*$/, '').trim();
+    if (orderByText) orderByText = orderByText.replace(/;\s*$/, '').trim();
+
+    let whereAst = null;
+    if (whereText) {
+        const tokens = tokenizeWhere(whereText);
+        if (tokens.length) {
+            whereAst = parseWhere(tokens);
+            resolveAstColumns(whereAst, warnings, name);
+        }
+    }
+
+    let sorts = [];
+    if (orderByText) {
+        sorts = orderByText.split(',').map(part=>{
+            const p = part.trim().split(/\s+/);
+            const col = resolveColumnName(p[0].replace(/^["`]|["`]$/g,''));
+            const dir = (p[1]||'asc').toLowerCase().startsWith('desc') ? 'desc' : 'asc';
+            return {column: col, direction: dir};
+        });
+    }
+
+    const selectCols = selectColsRaw ? selectColsRaw.map(resolveColumnName) : null;
+    const key = `cat_${lineNo}_${name.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40)}`;
+    return { key, label: name, raw: line, whereAst, selectCols, sorts };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DATA LOADING
+// ═══════════════════════════════════════════════════════════
+function loadData(json, name) {
+    if (!Array.isArray(json) || !json.length) { alert('JSON must be a non-empty array of records.'); return; }
+    fileName = name; allData = json; hiddenColumns = new Set();
+    tabs = [makeAllTab()]; activeTabKey = 'all'; categoryErrors = [];
+
+    urlColumn = detectUrlColumn(allData);
+    const skip = new Set(['id','url','category','job_url','link','href',urlColumn]);
+    const allKeys = new Set();
+    allData.forEach(r=>Object.keys(r).forEach(k=>allKeys.add(k)));
+    displayColumns = [...allKeys].filter(k=>!skip.has(k));
+
+    columnTypes = {}; colKeyMap = {};
+    allKeys.forEach(c=>{ columnTypes[c]=detectType(c,allData); colKeyMap[c.toLowerCase()]=c; });
+
+    const fd = document.getElementById('fileNameDisplay');
+    fd.textContent = name+'.json'; fd.style.display='';
+    document.getElementById('controls').style.display='';
+    document.getElementById('catFileBtn').style.display='';
+    document.getElementById('clearCatBtn').style.display='none';
+
+    renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CATEGORY (SQL) FILE LOADING
+// ═══════════════════════════════════════════════════════════
+function loadCategoriesFromText(text) {
+    if (!allData.length) { alert('Load data first, then load a category file.'); return; }
+    const lines = text.split(/\r?\n/);
+    const newTabs = [];
+    const warnings = [];
+    lines.forEach((rawLine, i) => {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#') || line.startsWith('//')) return;
+        try {
+            newTabs.push(parseCategoryLine(line, i+1, warnings));
+        } catch (e) {
+            warnings.push(`✕ Line ${i+1}: ${e.message}`);
+        }
+    });
+    tabs = [makeAllTab(), ...newTabs];
+    activeTabKey = newTabs.length ? newTabs[0].key : 'all';
+    categoryErrors = warnings;
+    document.getElementById('clearCatBtn').style.display = newTabs.length ? '' : 'none';
+    renderCategoryErrors();
+    renderTabBar();
+    renderTableArea();
+}
+
+function clearCategories() {
+    tabs = [makeAllTab()]; activeTabKey = 'all'; categoryErrors = [];
+    document.getElementById('clearCatBtn').style.display='none';
+    renderCategoryErrors();
+    renderTabBar();
+    renderTableArea();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MASTER RENDER
+// ═══════════════════════════════════════════════════════════
+function renderAll() {
+    renderColManager();
+    renderCategoryErrors();
+    renderTabBar();
+    renderTableArea();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COLUMN MANAGER
+// ═══════════════════════════════════════════════════════════
+function renderColManager() {
+    const wrap=document.getElementById('colManagerWrap');
+    wrap.innerHTML='';
+    displayColumns.forEach(col=>{
+        const chip=document.createElement('span');
+        chip.className='col-chip'+(hiddenColumns.has(col)?' hidden-col':'');
+        chip.textContent=col;
+        chip.title=hiddenColumns.has(col)?'Click to show':'Click to hide';
+        chip.addEventListener('click',()=>{
+            hiddenColumns.has(col)?hiddenColumns.delete(col):hiddenColumns.add(col);
+            renderColManager(); renderTableArea();
+        });
+        wrap.appendChild(chip);
+    });
+}
+document.getElementById('showAllColsBtn').addEventListener('click',()=>{
+    hiddenColumns.clear(); renderColManager(); renderTableArea();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  CATEGORY ERROR / WARNING BANNER
+// ═══════════════════════════════════════════════════════════
+function renderCategoryErrors() {
+    const el = document.getElementById('catErrorBanner');
+    if (!categoryErrors.length) { el.style.display='none'; el.innerHTML=''; return; }
+    el.style.display='';
+    el.innerHTML = `<strong>${categoryErrors.length} issue${categoryErrors.length!==1?'s':''} while parsing categories:</strong>`+
+        `<ul>${categoryErrors.map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB BAR
+// ═══════════════════════════════════════════════════════════
+function renderTabBar() {
+    const wrap = document.getElementById('tabBarWrap');
+    const bar  = document.getElementById('tabBar');
+    const hint = document.getElementById('catHint');
+    if (!allData.length) { wrap.style.display='none'; return; }
+    wrap.style.display='';
+    bar.innerHTML='';
+    hint.style.display = tabs.length<=1 ? '' : 'none';
+
+    tabs.forEach(tab=>{
+        const btn=document.createElement('button');
+        btn.className='tab-btn'+(tab.key===activeTabKey?' active':'');
+        btn.dataset.key=tab.key;
+
+        const label=document.createElement('span');
+        label.className='tab-label';
+        label.textContent=tab.label;
+        btn.appendChild(label);
+
+        if (tab.key!=='all') {
+            const close=document.createElement('span');
+            close.className='tab-close'; close.textContent='×'; close.title='Remove tab';
+            close.addEventListener('click', ev=>{
+                ev.stopPropagation();
+                tabs = tabs.filter(t=>t.key!==tab.key);
+                if (activeTabKey===tab.key) activeTabKey='all';
+                document.getElementById('clearCatBtn').style.display = tabs.length>1 ? '' : 'none';
+                renderTabBar(); renderTableArea();
+            });
+            btn.appendChild(close);
+        }
+
+        btn.addEventListener('click', ()=>{
+            activeTabKey = tab.key;
+            renderTabBar(); renderTableArea();
+        });
+        bar.appendChild(btn);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILTERING PER TAB (via the tab's parsed WHERE clause)
+// ═══════════════════════════════════════════════════════════
+function filterDataForTab(tab) {
+    if (!tab.whereAst) return allData;
+    return allData.filter(row=>{
+        try { return evalWhere(tab.whereAst, row, columnTypes); }
+        catch(e) { return false; }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABLE BUILDER  (sort-on-click-header lives here, per tab)
+// ═══════════════════════════════════════════════════════════
+function buildTable(cols, data, tab) {
+    const widths = computeWidths(cols, data);
+    const wrapper = document.createElement('div'); wrapper.className='table-wrapper';
+    const colgroup = cols.map((_,i)=>`<col style="width:${widths[i]}">`).join('');
+
+    const headerCells = cols.map((col,i)=>{
+        const si  = tab.sorts.findIndex(s=>s.column===col);
+        const dir = si>=0 ? tab.sorts[si].direction : null;
+        const badge = si>=0 ? `<span class="sort-label">s${si+1}${dir==='asc'?'↑':'↓'}</span>` : '';
+        return `<th data-col="${esc(col)}" style="width:${widths[i]}">
+                  <div class="th-inner"><span class="th-name">${esc(col)}</span>${badge}</div>
+                </th>`;
+    }).join('');
+
+    let bodyHTML='';
+    if (!data.length) {
+        bodyHTML = `<tr><td colspan="${cols.length||1}" style="text-align:center;padding:16px;color:var(--text-dim)">No records match</td></tr>`;
+    } else {
+        for (const row of data) {
+            const rawId = row['id']||'';
+            const uid = `${fileName}_${rawId}`;
+            const url = esc(row[urlColumn]||'');
+            const cls = clickedItems.has(uid) ? ' class="visited"' : '';
+            const cells = cols.map(c=>`<td>${esc(row[c])}</td>`).join('');
+            bodyHTML += `<tr${cls} data-uid="${esc(uid)}" data-url="${url}">${cells}</tr>`;
+        }
+    }
+
+    const table = document.createElement('table');
+    table.innerHTML = `<colgroup>${colgroup}</colgroup><thead><tr>${headerCells}</tr></thead><tbody>${bodyHTML}</tbody>`;
+
+    // Sort on header click — mutates this tab's own sort state only
+    table.querySelector('thead').addEventListener('click', e=>{
+        const th = e.target.closest('th[data-col]');
+        if (!th) return;
+        const col = th.dataset.col;
+        const i = tab.sorts.findIndex(s=>s.column===col);
+        if (i===-1) tab.sorts.push({column:col, direction:'asc'});
+        else if (tab.sorts[i].direction==='asc') tab.sorts[i].direction='desc';
+        else tab.sorts.splice(i,1);
+        renderTableArea();
+    });
+
+    // Row click → toggle visited (shared across all tabs) + open URL
+    table.querySelector('tbody').addEventListener('click', e=>{
+        const tr = e.target.closest('tr[data-uid]');
+        if (!tr) return;
+        const uid = tr.dataset.uid, url = tr.dataset.url;
+        tr.classList.toggle('visited');
+        clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
+        localStorage.setItem('clickedItems', JSON.stringify([...clickedItems]));
+        if (url) window.open(url,'_blank');
+    });
+
+    wrapper.appendChild(table);
+    return wrapper;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABLE AREA  (renders only the active tab)
+// ═══════════════════════════════════════════════════════════
+function renderTableArea() {
+    const area = document.getElementById('tableArea');
+    area.innerHTML='';
+
+    if (!allData.length) {
+        area.innerHTML = `<div class="empty-state"><div class="icon">◈</div><h3>No data loaded</h3><p class="text-dim">Click "Load Data" to open a JSON file</p></div>`;
+        return;
+    }
+
+    const tab = tabs.find(t=>t.key===activeTabKey) || tabs[0];
+    const filtered = filterDataForTab(tab);
+    const sorted = sortData(filtered, tab.sorts);
+
+    let cols = (tab.selectCols && tab.selectCols.length) ? tab.selectCols.filter(c=>displayColumns.includes(c)) : [];
+    if (!cols.length) cols = visibleCols();
+
+    const titleRow = document.createElement('div');
+    titleRow.className='table-section-title';
+    titleRow.innerHTML = `<span>${esc(tab.label)}</span><span class="count">${sorted.length} of ${allData.length} record${allData.length!==1?'s':''}</span>`;
+    area.appendChild(titleRow);
+
+    if (tab.raw) {
+        const info = document.createElement('div');
+        info.className='sql-preview';
+        info.innerHTML = `<span class="sql-label">SQL</span><code>${esc(tab.raw)}</code>`;
+        area.appendChild(info);
+    }
+
+    area.appendChild(buildTable(cols, sorted, tab));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EVENT WIRING
+// ═══════════════════════════════════════════════════════════
+document.getElementById('dataFileInput').addEventListener('change', e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const name=file.name.replace(/\.[^.]+$/,'');
+    const reader=new FileReader();
+    reader.onload=ev=>{ try{ loadData(JSON.parse(ev.target.result), name); } catch(err){ alert('Bad JSON: '+err.message); } };
+    reader.onerror=()=>alert('Could not read file.');
+    reader.readAsText(file); e.target.value='';
+});
+
+document.getElementById('catFileInput').addEventListener('change', e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{ loadCategoriesFromText(ev.target.result); };
+    reader.onerror=()=>alert('Could not read file.');
+    reader.readAsText(file); e.target.value='';
+});
+
+document.getElementById('clearCatBtn').addEventListener('click', clearCategories);
+</script>
+</body>
+</html>
