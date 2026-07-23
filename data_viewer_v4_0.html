@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg:            #0f1117;
+        --surface:       #181c27;
+        --surface2:      #1e2335;
+        --surface3:      #242840;
+        --border:        #2a2f45;
+        --accent:        #4f8ef7;
+        --accent2:       #f7c94f;
+        --danger:        #f75f5f;
+        --success:       #4fcf8e;
+        --text:          #d4d8e8;
+        --text-dim:      #7880a0;
+        --text-head:     #ffffff;
+        --th-bg:         #1e2335;
+        --visited-bg:    #0d2b1e;
+        --visited-hover: #112e21;
+        --row-hover:     #1e2335;
+        --shadow:        0 2px 12px rgba(0,0,0,0.4);
+        --mono: 'JetBrains Mono', monospace;
+        --sans: 'DM Sans', sans-serif;
+    }
+    [data-theme="light"] {
+        --bg:            #f5f6fa;
+        --surface:       #ffffff;
+        --surface2:      #eef0f7;
+        --surface3:      #e4e8f5;
+        --border:        #d0d4e8;
+        --accent:        #2563eb;
+        --accent2:       #d97706;
+        --danger:        #dc2626;
+        --success:       #16a34a;
+        --text:          #1e2340;
+        --text-dim:      #6b7280;
+        --text-head:     #0f172a;
+        --th-bg:         #eef0f7;
+        --visited-bg:    #dcfce7;
+        --visited-hover: #bbf7d0;
+        --row-hover:     #f0f3ff;
+        --shadow:        0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 13px;
+        min-height: 100vh;
+        transition: background 0.2s, color 0.2s;
+    }
+
+    /* ── Topbar ─────────────────────────────────────────────── */
+    #topbar {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 8px 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 200;
+        box-shadow: var(--shadow);
+    }
+    .brand { font-family:var(--mono); font-size:13px; font-weight:500; color:var(--accent); letter-spacing:.05em; margin-right:4px; }
+    #dataSummary { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 8px; background:var(--bg); border-radius:4px; border:1px solid var(--border); display:none; }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:5px; border:1px solid transparent; font-family:var(--sans); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; white-space:nowrap; background:none; color:var(--text); }
+    .btn-primary  { background:var(--accent);   color:#fff;    border-color:var(--accent);  }
+    .btn-primary:hover  { opacity:.85; }
+    .btn-outline  { border-color:var(--border); }
+    .btn-outline:hover  { border-color:var(--accent); color:var(--accent); }
+    .btn-danger   { border-color:var(--danger); color:var(--danger); }
+    .btn-danger:hover   { background:var(--danger); color:#fff; }
+    .btn-sm       { padding:3px 8px; font-size:11px; }
+    .btn-file     { position:relative; overflow:hidden; }
+    .btn-file input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    #themeToggle  { margin-left:auto; font-size:15px; padding:4px 9px; border-radius:20px; border:1px solid var(--border); background:var(--surface2); cursor:pointer; transition:all .2s; line-height:1; }
+    #themeToggle:hover { border-color:var(--accent); }
+
+    /* ── Cards ───────────────────────────────────────────────── */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden; box-shadow:var(--shadow); }
+    .card-header { background:var(--surface2); border-bottom:1px solid var(--border); padding:7px 14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .card-header strong { color:var(--text-head); font-size:11px; letter-spacing:.07em; text-transform:uppercase; }
+    .card-body { padding:10px 14px; }
+
+    /* ── Column chips ────────────────────────────────────────── */
+    #colManagerWrap { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+    .col-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:4px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .12s; user-select:none; }
+    .col-chip:hover { border-color:var(--accent); color:var(--accent); }
+    .col-chip.hidden-col { opacity:.35; text-decoration:line-through; border-style:dashed; }
+
+    /* ── Table pills (loaded tables, click-to-copy) ─────────────── */
+    #tablePillsWrap { display:flex; flex-wrap:wrap; gap:6px; }
+    .table-pill { display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:20px; font-size:12px; font-family:var(--mono); font-weight:500; border:1px solid var(--accent); background:var(--surface2); color:var(--accent); cursor:pointer; transition:all .15s; user-select:none; }
+    .table-pill:hover { background:var(--accent); color:#fff; }
+    .table-pill.copied { background:var(--success); border-color:var(--success); color:#fff; }
+    .table-pill .row-count { font-weight:400; opacity:.7; font-size:10px; }
+
+    /* ── Category tabs ───────────────────────────────────────── */
+    #tabBarWrap { margin-bottom: 4px; }
+    .tab-bar { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; border-bottom:1px solid var(--border); padding-top:4px; }
+    .tab-btn {
+        display:inline-flex; align-items:center; gap:7px;
+        padding:7px 14px; border-radius:7px 7px 0 0;
+        border:1px solid var(--border); border-bottom:none;
+        background:var(--surface2); color:var(--text-dim);
+        font-family:var(--mono); font-size:12px; cursor:pointer;
+        transition:all .15s; position:relative; top:1px;
+    }
+    .tab-btn:hover { color:var(--text); border-color:var(--accent); }
+    .tab-btn.active { background:var(--surface); color:var(--accent); border-color:var(--accent); border-bottom:1px solid var(--surface); font-weight:500; }
+    .tab-close { font-size:13px; opacity:.55; line-height:1; padding:0 1px; border-radius:3px; }
+    .tab-close:hover { opacity:1; color:var(--danger); }
+
+    .cat-hint { padding:10px 14px; background:var(--surface); border:1px dashed var(--border); border-radius:8px; margin:10px 0; font-size:12px; color:var(--text-dim); line-height:1.6; }
+    .cat-hint strong { color:var(--text-head); }
+    .cat-hint pre { font-family:var(--mono); font-size:11px; color:var(--text); background:var(--bg); padding:8px 10px; border-radius:5px; border:1px solid var(--border); margin-top:6px; white-space:pre-wrap; word-break:break-word; }
+    .cat-hint code { font-family:var(--mono); background:var(--surface2); padding:1px 5px; border-radius:3px; color:var(--accent); }
+
+    .cat-error-banner { background:rgba(247,95,95,.08); border:1px solid var(--danger); border-radius:6px; padding:8px 12px; margin:10px 0; font-family:var(--mono); font-size:11px; color:var(--danger); }
+    .cat-error-banner ul { margin:4px 0 0 18px; }
+
+    /* ── SQL preview strip ───────────────────────────────────── */
+    .sql-preview { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:6px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:5px; font-family:var(--mono); font-size:11px; color:var(--text-dim); overflow-x:auto; white-space:nowrap; }
+    .sql-preview .sql-label { flex-shrink:0; padding:1px 6px; background:var(--accent); color:#fff; border-radius:3px; font-size:9px; font-weight:700; letter-spacing:.05em; }
+    .sql-preview code { color:var(--text); }
+
+    /* ── Table area ──────────────────────────────────────────── */
+    #mainContent { padding:12px 16px; }
+
+    .table-section-title { font-family:var(--mono); font-size:12px; color:var(--accent); padding:10px 0 6px; margin-bottom:6px; display:flex; align-items:baseline; gap:10px; }
+    .table-section-title .count { font-size:10px; color:var(--text-dim); }
+    .table-section-title .download-group { margin-left:auto; display:flex; gap:6px; }
+
+    .table-wrapper { width:100%; overflow:hidden; border:1px solid var(--border); border-radius:6px; margin-bottom:4px; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+    thead th { background:var(--th-bg); color:var(--text-head); padding:6px 8px; text-align:left; font-weight:500; font-size:11px; letter-spacing:.03em; white-space:nowrap; cursor:pointer; user-select:none; border-bottom:2px solid var(--border); border-right:1px solid var(--border); position:sticky; top:0; z-index:5; overflow:hidden; text-overflow:ellipsis; }
+    thead th:last-child { border-right:none; }
+    thead th:hover { background:var(--surface2); }
+    .th-inner { display:flex; align-items:center; gap:3px; overflow:hidden; }
+    .th-name  { flex:1; overflow:hidden; text-overflow:ellipsis; }
+    .sort-label { flex-shrink:0; display:inline-flex; align-items:center; gap:2px; padding:1px 4px; background:var(--accent2); color:#1a1400; border-radius:3px; font-family:var(--mono); font-size:9px; font-weight:700; }
+
+    tbody tr { border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+    tbody tr:hover   { background:var(--row-hover); }
+    tbody tr.visited { background:var(--visited-bg); }
+    tbody tr.visited:hover { background:var(--visited-hover); }
+    tbody td { padding:5px 8px; border-right:1px solid var(--border); white-space:normal; word-break:break-word; overflow-wrap:break-word; color:var(--text); line-height:1.5; vertical-align:top; }
+    tbody td:last-child { border-right:none; }
+
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+    .empty-state .icon { font-size:46px; margin-bottom:14px; }
+    .empty-state h3 { font-size:16px; color:var(--text); margin-bottom:6px; }
+
+    .text-dim { color:var(--text-dim); }
+    .text-sm  { font-size:11px; }
+
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:var(--bg); }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+    <span class="brand">◈ DATA VIEWER</span>
+    <label class="btn btn-primary btn-file">📂 Load Data<input type="file" id="dataFileInput" accept=".json" multiple></label>
+    <span id="dataSummary"></span>
+    <label class="btn btn-outline btn-file" id="catFileBtn" style="display:none"
+           title="Text file: one view per line, e.g. High Priority - select * from orders where priority = 'High' order by due_date asc">
+           📄 Load Categories (SQL)<input type="file" id="catFileInput" accept=".txt,.sql,text/plain"></label>
+    <button class="btn btn-danger" id="clearCatBtn" style="display:none">✕ Clear Categories</button>
+    <button id="themeToggle" title="Toggle theme">🌙</button>
+</div>
+
+<div id="mainContent">
+
+    <!-- ── Loaded tables (click a pill to copy its name + column list) ── -->
+    <div id="tablePillsCard" class="card" style="display:none">
+        <div class="card-header">
+            <strong>🗂 Loaded Tables</strong>
+            <span class="text-dim text-sm">Click a table to copy its name, then its columns (one per line) — handy for writing SQL below</span>
+        </div>
+        <div class="card-body"><div id="tablePillsWrap"></div></div>
+    </div>
+
+    <!-- ── Controls ─────────────────────────────────────────────── -->
+    <div id="controls" style="display:none">
+        <div class="card">
+            <div class="card-header">
+                <strong>🧱 Columns</strong>
+                <button class="btn btn-outline btn-sm" id="showAllColsBtn">Show All</button>
+                <span class="text-dim text-sm">Click to hide/show — applies to the active tab only</span>
+            </div>
+            <div class="card-body"><div id="colManagerWrap"></div></div>
+        </div>
+    </div>
+
+    <!-- ── Category parse errors/warnings ─────────────────────────── -->
+    <div id="catErrorBanner" class="cat-error-banner" style="display:none"></div>
+
+    <!-- ── Tabs ─────────────────────────────────────────────────── -->
+    <div id="tabBarWrap" style="display:none">
+        <div id="tabBar" class="tab-bar"></div>
+        <div id="catHint" class="cat-hint">
+            <strong>No views loaded yet</strong> — showing the default <code>tbl_*</code> tab(s) for your loaded table(s).
+            Load a text file to add view tabs, one per line, in the form <code>View Name - SELECT ...</code>:
+            <pre>High Priority - select * from orders where priority = 'High' and status != 'Closed' order by due_date asc
+Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id
+Recent - select * from tbl_orders where created_at >= '2026-01-01'</pre>
+            Each line must be a full <code>SELECT</code> statement — real SQL, powered by a client-side SQL engine, so
+            <code>JOIN</code>, <code>GROUP BY</code>, aggregate functions and subqueries all work. Reference any loaded
+            table by the name shown in its pill above (case-sensitive), its default <code>tbl_&lt;name&gt;</code> view, or
+            any view defined earlier in the same file. Column names with spaces or special characters need brackets,
+            e.g. <code>[Job Title]</code>.
+            <br><strong>For safety, only plain <code>SELECT</code> queries are allowed</strong> — no
+            <code>INSERT / UPDATE / DELETE / DROP / CREATE</code>, no semicolon-separated statements, and no external
+            file/URL data sources. Anything else is rejected with an explanation below.
+        </div>
+    </div>
+
+    <!-- ── Table Area ────────────────────────────────────────────── -->
+    <div id="tableArea">
+        <div class="empty-state">
+            <div class="icon">◈</div>
+            <h3>No data loaded</h3>
+            <p class="text-dim">Click "Load Data" to open one or more JSON files</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- AlaSQL must be downloaded and placed next to this HTML file as alasql.min.js -->
+<!-- Get it from https://www.npmjs.com/package/alasql (dist/alasql.min.js) or https://cdn.jsdelivr.net/npm/alasql@4 -->
+<script src="alasql.min.js"></script>
+<script>
+'use strict';
+
+if (typeof alasql === 'undefined') {
+    document.body.innerHTML = `
+        <div style="max-width:640px;margin:60px auto;padding:28px 32px;background:#181c27;color:#f75f5f;
+                    border:1px solid #f75f5f;border-radius:10px;font-family:'DM Sans',sans-serif;line-height:1.7;">
+            <h2 style="margin-bottom:10px;">⚠ Missing library: alasql.min.js</h2>
+            <p>This page needs the AlaSQL library to run SQL queries safely in the browser.</p>
+            <p>Download <code>alasql.min.js</code> from
+                <a href="https://www.npmjs.com/package/alasql" target="_blank" style="color:#4f8ef7;">npmjs.com/package/alasql</a>
+                (the file is at <code>dist/alasql.min.js</code> inside the package), or from
+                <a href="https://cdn.jsdelivr.net/npm/alasql@4" target="_blank" style="color:#4f8ef7;">jsDelivr</a>,
+                and save it in the <strong>same folder</strong> as this HTML file, named exactly
+                <code>alasql.min.js</code>. Then reload this page.</p>
+        </div>`;
+    throw new Error('alasql.min.js not found next to this file — see on-page instructions.');
+}
+alasql.options.casesensitive = true;
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+// loadedTables: sanitizedTableName -> { rawName, allKeys:[...], rowCount, urlColumn }
+let loadedTables   = {};
+let tableOrder     = [];   // insertion order of sanitized table names
+
+// tabs: one 'table' tab per loaded table (tbl_<name>, uncloseable) + one 'view' tab
+// per line in the loaded categories/SQL file (vw_<slug>, closeable).
+// Each tab: { key, kind:'table'|'view', label, viewName, sourceTable, raw, sql, hiddenColumns:Set, sorts:[] }
+let tabs           = [];
+let activeTabKey   = null;
+let categoryErrors = [];
+
+let clickedItems   = new Set(safeLoadClickedItems());
+function safeLoadClickedItems() {
+    try { return JSON.parse(localStorage.getItem('clickedItems') || '[]'); }
+    catch (e) { return []; }
+}
+
+// ── Theme ────────────────────────────────────────────────
+let isDark = true;
+const themeBtn = document.getElementById('themeToggle');
+function applyTheme() {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    themeBtn.textContent = isDark ? '🌙' : '☀️';
+}
+themeBtn.addEventListener('click', () => { isDark = !isDark; applyTheme(); });
+applyTheme();
+
+// ═══════════════════════════════════════════════════════════
+//  DATE / TYPE / VALUE HELPERS  (unchanged sorting engine)
+// ═══════════════════════════════════════════════════════════
+const MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+function parseDate(s) {
+    if (!s) return null;
+    s = String(s).trim();
+    const m1 = s.match(/^([A-Za-z]{3})[a-z]*\s+(\d{1,2}),?\s*(\d{4})$/);
+    if (m1 && MON[m1[1]] !== undefined) return new Date(+m1[3], MON[m1[1]], +m1[2]);
+    const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+    const m3 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m3) return new Date(+m3[3], +m3[2]-1, +m3[1]);
+    return null;
+}
+function looksDate(v) {
+    v = String(v).trim();
+    return /^[A-Za-z]{3}[a-z]*\s+\d{1,2},?\s*\d{4}$/.test(v)
+        || /^\d{4}-\d{2}-\d{2}$/.test(v)
+        || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v);
+}
+function looksNum(v) {
+    const s = String(v).replace(/[₹$,\s+%]/g,'');
+    return s !== '' && /^-?[\d.]+$/.test(s);
+}
+function detectType(col, data) {
+    const sample = data.map(r=>r[col]).filter(v=>v!==''&&v!=null).slice(0,60);
+    if (!sample.length) return 'text';
+    if (sample.every(looksDate)) return 'date';
+    if (sample.every(looksNum))  return 'number';
+    return 'text';
+}
+function parseVal(v, type) {
+    if (v==null||v===''||v==='nan'||v==='None') return null;
+    const s = String(v).trim(); if (!s) return null;
+    if (type==='number') { const n=+s.replace(/[₹$,\s+%]/g,''); return isNaN(n)?null:n; }
+    if (type==='date')   return parseDate(s);
+    return s.toLowerCase();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SORT ENGINE  (per-tab sort state, types resolved per render)
+// ═══════════════════════════════════════════════════════════
+function sortData(data, sorts, types) {
+    if (!sorts||!sorts.length) return [...data];
+    return [...data].sort((a,b)=>{
+        for (const s of sorts) {
+            const type=types[s.column]||'text';
+            const av=parseVal(a[s.column],type), bv=parseVal(b[s.column],type);
+            let c=0;
+            if (av===null&&bv===null) continue;
+            else if (av===null) c=1; else if (bv===null) c=-1;
+            else if (av instanceof Date) c=av.getTime()-bv.getTime();
+            else if (typeof av==='number') c=av-bv;
+            else c=String(av).localeCompare(String(bv));
+            if (c!==0) return s.direction==='asc'?c:-c;
+        }
+        return 0;
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COLUMN WIDTH CALCULATION
+// ═══════════════════════════════════════════════════════════
+const CHAR_W=7.4, PAD_PX=18, MIN_PX=50, MAX_PX=280;
+function computeWidths(cols, data) {
+    const sample=data.slice(0,100);
+    const raw=cols.map(col=>{
+        let mx=col.length+2;
+        for (const row of sample) { const l=String(row[col]??'').length; if(l>mx)mx=l; }
+        return Math.max(MIN_PX,Math.min(MAX_PX,mx*CHAR_W+PAD_PX));
+    });
+    const total=raw.reduce((a,b)=>a+b,0)||1;
+    return raw.map(px=>`${(px/total*100).toFixed(3)}%`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  URL COLUMN DETECTION  (unchanged)
+// ═══════════════════════════════════════════════════════════
+function detectUrlColumn(data) {
+    if (!data.length) return 'url';
+    const first=data[0];
+    for (const n of ['url','job_url','link','href']) if(n in first) return n;
+    for (const k of Object.keys(first)) if(String(first[k]||'').startsWith('http')) return k;
+    return 'url';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ESC HELPER
+// ═══════════════════════════════════════════════════════════
+function esc(s) {
+    return String(s==null?'':s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function firstLine(msg) { return String(msg).split('\n')[0]; }
+function unionKeys(data) {
+    const seen = new Set();
+    data.forEach(r=>Object.keys(r).forEach(k=>seen.add(k)));
+    return [...seen];
+}
+
+// ═══════════════════════════════════════════════════════════
+//  IDENTIFIER SANITIZING
+//  Tables keep their original casing (from the file name);
+//  views are slugified lower_snake_case per the vw_ naming convention.
+// ═══════════════════════════════════════════════════════════
+function sanitizeTableName(raw) {
+    let s = String(raw).trim().replace(/[^A-Za-z0-9_]+/g,'_').replace(/^_+|_+$/g,'');
+    if (!s) s = 'table';
+    if (/^[0-9]/.test(s)) s = 't_'+s;
+    return s;
+}
+function slugify(raw) {
+    let s = String(raw).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+    if (!s) s = 'view';
+    if (/^[0-9]/.test(s)) s = 'v_'+s;
+    return s;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SAFE SQL GATE
+//  Only a single, plain SELECT statement is allowed, and it may only
+//  read from tables/views this tool created (no external file/URL
+//  sources, no writes, no multiple statements). Everything is
+//  validated against AlaSQL's own parser output — not string matching —
+//  so this can't be bypassed with comments, casing, or whitespace tricks.
+// ═══════════════════════════════════════════════════════════
+function knownQueryTargets() {
+    const s = new Set();
+    tableOrder.forEach(n => { s.add(n); s.add(`tbl_${n}`); });
+    tabs.filter(t=>t.kind==='view').forEach(t => s.add(t.viewName));
+    return s;
+}
+function isSelectShape(st) {
+    // AlaSQL's minified build mangles class/constructor names, so we can't check
+    // `st.constructor.name === 'Select'`. Property keys on the AST are never mangled
+    // (the query compiler itself depends on them at runtime), so instead we check the
+    // one shape that's unique to a SELECT-with-FROM among every statement type AlaSQL
+    // supports (UPDATE/CREATE TABLE also have `.columns`, but never alongside `.from`).
+    return Array.isArray(st.columns) && Array.isArray(st.from) && st.from.length > 0 && !('explain' in st);
+}
+function validateFromTargets(node, allowed) {
+    if (!node || typeof node !== 'object') return;
+    if (node.into) throw new Error('"SELECT ... INTO" is not allowed — views cannot create or modify tables.');
+    const targets = [];
+    if (Array.isArray(node.from))  targets.push(...node.from);
+    if (Array.isArray(node.joins)) node.joins.forEach(j => targets.push(j.table));
+    if (Array.isArray(node.queries)) node.queries.forEach(q => validateFromTargets(q, allowed)); // UNION branches
+    targets.forEach(t => {
+        if (!t) return;
+        if (t.funcid) {
+            throw new Error(`External data source "${t.funcid}(...)" is not allowed — only loaded tables/views can be queried.`);
+        }
+        if (t.tableid) {
+            if (!allowed.has(t.tableid)) {
+                throw new Error(`Unknown table/view "${t.tableid}". Available: ${[...allowed].join(', ') || '(none)'}`);
+            }
+        } else if (t.from || t.columns) {
+            validateFromTargets(t, allowed); // nested subquery
+        }
+    });
+}
+function assertSafeSelect(sql, allowed) {
+    let ast;
+    try { ast = alasql.parse(sql); }
+    catch (e) { throw new Error('SQL syntax error: ' + firstLine(e.message)); }
+    if (!ast.statements || ast.statements.length !== 1) {
+        throw new Error('Only a single SELECT statement is allowed (no semicolon-separated statements).');
+    }
+    const st = ast.statements[0];
+    if (!isSelectShape(st)) {
+        throw new Error('Only SELECT statements (with a FROM clause) are allowed — no INSERT/UPDATE/DELETE/DROP/CREATE/etc.');
+    }
+    if (st.into) throw new Error('"SELECT ... INTO" is not allowed — views cannot create or modify tables.');
+    validateFromTargets(st, allowed);
+}
+function guessPrimaryTable(sql) {
+    // Best-effort: used only to namespace the visited-row id, so a row keeps its
+    // "visited" state whether viewed via its table's default tab or a view built on it.
+    try {
+        let node = alasql.parse(sql).statements[0];
+        for (let i=0;i<20;i++) {
+            if (!node.from || !node.from[0]) return null;
+            const f = node.from[0];
+            if (f.tableid) return f.tableid.replace(/^tbl_/, '');
+            if (f.from) { node = f; continue; }
+            return null;
+        }
+        return null;
+    } catch (e) { return null; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ALASQL TABLE / VIEW MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+function ensureAlaSQLTable(name) {
+    if (!alasql.tables[name]) alasql(`CREATE TABLE IF NOT EXISTS [${name}]`);
+}
+function setAlaSQLTableData(name, data) {
+    ensureAlaSQLTable(name);
+    alasql.tables[name].data = data;
+    alasql(`DROP VIEW IF EXISTS [tbl_${name}]`);
+    alasql(`CREATE VIEW [tbl_${name}] AS SELECT * FROM [${name}]`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DATA LOADING  (multiple JSON files -> multiple tables)
+// ═══════════════════════════════════════════════════════════
+function readJsonFile(file) {
+    const name = file.name.replace(/\.[^.]+$/, '');
+    return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try { resolve({ name, json: JSON.parse(ev.target.result) }); }
+            catch (err) { resolve({ name, error: 'Bad JSON: ' + err.message }); }
+        };
+        reader.onerror = () => resolve({ name, error: 'Could not read file.' });
+        reader.readAsText(file);
+    });
+}
+function loadJsonTable(json, rawName) {
+    if (!Array.isArray(json) || !json.length) {
+        alert(`"${rawName}": JSON must be a non-empty array of records.`);
+        return;
+    }
+    const name = sanitizeTableName(rawName);
+    setAlaSQLTableData(name, json);
+
+    const urlColumn = detectUrlColumn(json);
+    const allKeys = unionKeys(json);
+    loadedTables[name] = { rawName, allKeys, rowCount: json.length, urlColumn };
+    if (!tableOrder.includes(name)) tableOrder.push(name);
+
+    const tabKey = `tbl_${name}`;
+    if (!tabs.find(t => t.key === tabKey)) {
+        tabs.push({
+            key: tabKey, kind: 'table', label: tabKey, viewName: tabKey,
+            sourceTable: name, raw: null, sql: `SELECT * FROM [${name}]`,
+            hiddenColumns: new Set(), sorts: []
+        });
+    }
+    if (!activeTabKey) activeTabKey = tabKey;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CATEGORY (SQL VIEW) FILE LOADING
+// ═══════════════════════════════════════════════════════════
+function parseCategoryLine(line) {
+    const sep = line.match(/^(.*?)\s+-\s+([\s\S]+)$/);
+    if (!sep) throw new Error(`Could not find "<view name> - <SELECT statement>" in: ${line}`);
+    const name = sep[1].trim();
+    let sql = sep[2].trim().replace(/;\s*$/, '');
+    if (!name) throw new Error('Missing view name');
+    if (!sql)  throw new Error('Missing SQL statement');
+    if (!/^select\b/i.test(sql)) {
+        throw new Error(`must be a full SELECT statement, e.g. "select * from ${tableOrder[0] || 'your_table'} where ..."`);
+    }
+    return { name, sql };
+}
+function loadCategoriesFromText(text) {
+    if (!tableOrder.length) { alert('Load at least one data table first, then load a category file.'); return; }
+
+    // Drop the previous set of views before rebuilding.
+    tabs.filter(t => t.kind === 'view').forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+    tabs = tabs.filter(t => t.kind === 'table');
+
+    const lines = text.split(/\r?\n/);
+    const newTabs = [];
+    const warnings = [];
+    const allowed = knownQueryTargets();
+
+    lines.forEach((rawLine, i) => {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#') || line.startsWith('//')) return;
+        try {
+            const { name, sql } = parseCategoryLine(line);
+            assertSafeSelect(sql, allowed);
+            const slug = slugify(name);
+            const viewName = `vw_${slug}`;
+            alasql(`DROP VIEW IF EXISTS [${viewName}]`);
+            alasql(`CREATE VIEW [${viewName}] AS ${sql}`);
+            allowed.add(viewName); // later lines in this same file may build on this view
+            newTabs.push({
+                key: viewName, kind: 'view', label: viewName, viewName,
+                sourceTable: guessPrimaryTable(sql), raw: line, sql,
+                hiddenColumns: new Set(), sorts: []
+            });
+        } catch (e) {
+            warnings.push(`✕ Line ${i + 1}: ${e.message}`);
+        }
+    });
+
+    tabs = [...tabs, ...newTabs];
+    activeTabKey = newTabs.length ? newTabs[0].key : (tabs[0] ? tabs[0].key : null);
+    categoryErrors = warnings;
+    renderAll();
+}
+function clearCategories() {
+    tabs.filter(t => t.kind === 'view').forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+    tabs = tabs.filter(t => t.kind === 'table');
+    categoryErrors = [];
+    activeTabKey = tabs.length ? tabs[0].key : null;
+    renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CLIPBOARD HELPER  (works over file:// too, via execCommand fallback)
+// ═══════════════════════════════════════════════════════════
+function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+    }
+    return new Promise((resolve, reject) => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.focus(); ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            ok ? resolve() : reject(new Error('execCommand failed'));
+        } catch (e) { reject(e); }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MASTER RENDER
+// ═══════════════════════════════════════════════════════════
+function renderAll() {
+    document.getElementById('catFileBtn').style.display  = tableOrder.length ? '' : 'none';
+    document.getElementById('clearCatBtn').style.display = tabs.some(t => t.kind === 'view') ? '' : 'none';
+
+    const ds = document.getElementById('dataSummary');
+    if (tableOrder.length) {
+        const totalRows = tableOrder.reduce((sum, n) => sum + loadedTables[n].rowCount, 0);
+        ds.textContent = `${tableOrder.length} table${tableOrder.length!==1?'s':''} · ${totalRows} row${totalRows!==1?'s':''}`;
+        ds.style.display = '';
+    } else {
+        ds.style.display = 'none';
+    }
+
+    renderTablePills();
+    renderCategoryErrors();
+    renderTabBar();
+    renderTableArea();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOADED-TABLE PILLS  (click to copy "tablename\ncol1\ncol2...")
+// ═══════════════════════════════════════════════════════════
+function renderTablePills() {
+    const card = document.getElementById('tablePillsCard');
+    const wrap = document.getElementById('tablePillsWrap');
+    wrap.innerHTML = '';
+    if (!tableOrder.length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    tableOrder.forEach(name => {
+        const meta = loadedTables[name];
+        const pill = document.createElement('span');
+        pill.className = 'table-pill';
+        pill.innerHTML = `${esc(name)} <span class="row-count">${meta.rowCount}</span>`;
+        pill.title = meta.rawName !== name
+            ? `Loaded from "${meta.rawName}" — click to copy table name + columns`
+            : 'Click to copy table name + columns';
+        pill.addEventListener('click', () => {
+            const colLines = meta.allKeys.map(c => /^[A-Za-z_][A-Za-z0-9_]*$/.test(c) ? c : `[${c}]`);
+            const text = [name, ...colLines].join('\n');
+            copyText(text).then(() => {
+                pill.classList.add('copied');
+                const original = pill.innerHTML;
+                pill.innerHTML = '✓ Copied';
+                setTimeout(() => { pill.classList.remove('copied'); pill.innerHTML = original; }, 1100);
+            }).catch(() => alert('Could not copy to clipboard.'));
+        });
+        wrap.appendChild(pill);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COLUMN MANAGER  (scoped to the active tab)
+// ═══════════════════════════════════════════════════════════
+function renderColManager(tab, cols) {
+    const wrap = document.getElementById('colManagerWrap');
+    wrap.innerHTML = '';
+    cols.forEach(col => {
+        const chip = document.createElement('span');
+        chip.className = 'col-chip' + (tab.hiddenColumns.has(col) ? ' hidden-col' : '');
+        chip.textContent = col;
+        chip.title = tab.hiddenColumns.has(col) ? 'Click to show' : 'Click to hide';
+        chip.addEventListener('click', () => {
+            tab.hiddenColumns.has(col) ? tab.hiddenColumns.delete(col) : tab.hiddenColumns.add(col);
+            renderTableArea();
+        });
+        wrap.appendChild(chip);
+    });
+}
+document.getElementById('showAllColsBtn').addEventListener('click', () => {
+    const tab = tabs.find(t => t.key === activeTabKey);
+    if (tab) tab.hiddenColumns.clear();
+    renderTableArea();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  CATEGORY ERROR / WARNING BANNER
+// ═══════════════════════════════════════════════════════════
+function renderCategoryErrors() {
+    const el = document.getElementById('catErrorBanner');
+    if (!categoryErrors.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    el.innerHTML = `<strong>${categoryErrors.length} issue${categoryErrors.length !== 1 ? 's' : ''} while parsing categories:</strong>` +
+        `<ul>${categoryErrors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB BAR
+// ═══════════════════════════════════════════════════════════
+function renderTabBar() {
+    const wrap = document.getElementById('tabBarWrap');
+    const bar  = document.getElementById('tabBar');
+    const hint = document.getElementById('catHint');
+    if (!tabs.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    bar.innerHTML = '';
+    hint.style.display = tabs.some(t => t.kind === 'view') ? 'none' : '';
+
+    tabs.forEach(tab => {
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn' + (tab.key === activeTabKey ? ' active' : '');
+        btn.dataset.key = tab.key;
+
+        const label = document.createElement('span');
+        label.className = 'tab-label';
+        label.textContent = tab.label;
+        btn.appendChild(label);
+
+        if (tab.kind === 'view') {
+            const close = document.createElement('span');
+            close.className = 'tab-close'; close.textContent = '×'; close.title = 'Remove view';
+            close.addEventListener('click', ev => {
+                ev.stopPropagation();
+                try { alasql(`DROP VIEW IF EXISTS [${tab.viewName}]`); } catch (e) {}
+                tabs = tabs.filter(t => t.key !== tab.key);
+                if (activeTabKey === tab.key) activeTabKey = tabs.length ? tabs[0].key : null;
+                document.getElementById('clearCatBtn').style.display = tabs.some(t => t.kind === 'view') ? '' : 'none';
+                renderTabBar(); renderTableArea();
+            });
+            btn.appendChild(close);
+        }
+
+        btn.addEventListener('click', () => {
+            activeTabKey = tab.key;
+            renderTabBar(); renderTableArea();
+        });
+        bar.appendChild(btn);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABLE BUILDER  (sort-on-click-header + visited/url row click)
+// ═══════════════════════════════════════════════════════════
+function buildTable(cols, data, tab, urlColumn) {
+    const widths = computeWidths(cols, data);
+    const wrapper = document.createElement('div'); wrapper.className = 'table-wrapper';
+    const colgroup = cols.map((_, i) => `<col style="width:${widths[i]}">`).join('');
+
+    const headerCells = cols.map((col, i) => {
+        const si = tab.sorts.findIndex(s => s.column === col);
+        const dir = si >= 0 ? tab.sorts[si].direction : null;
+        const badge = si >= 0 ? `<span class="sort-label">s${si + 1}${dir === 'asc' ? '↑' : '↓'}</span>` : '';
+        return `<th data-col="${esc(col)}" style="width:${widths[i]}">
+                  <div class="th-inner"><span class="th-name">${esc(col)}</span>${badge}</div>
+                </th>`;
+    }).join('');
+
+    let bodyHTML = '';
+    if (!data.length) {
+        bodyHTML = `<tr><td colspan="${cols.length || 1}" style="text-align:center;padding:16px;color:var(--text-dim)">No records match</td></tr>`;
+    } else {
+        const namespace = tab.sourceTable || tab.viewName;
+        data.forEach((row, idx) => {
+            const hasId = row['id'] !== undefined && row['id'] !== null && row['id'] !== '';
+            const uid = hasId ? `${namespace}_${row['id']}` : `${namespace}_r${idx}`;
+            const url = esc(row[urlColumn] || '');
+            const cls = clickedItems.has(uid) ? ' class="visited"' : '';
+            const cells = cols.map(c => `<td>${esc(row[c])}</td>`).join('');
+            bodyHTML += `<tr${cls} data-uid="${esc(uid)}" data-url="${url}">${cells}</tr>`;
+        });
+    }
+
+    const table = document.createElement('table');
+    table.innerHTML = `<colgroup>${colgroup}</colgroup><thead><tr>${headerCells}</tr></thead><tbody>${bodyHTML}</tbody>`;
+
+    // Sort on header click — mutates this tab's own sort state only
+    table.querySelector('thead').addEventListener('click', e => {
+        const th = e.target.closest('th[data-col]');
+        if (!th) return;
+        const col = th.dataset.col;
+        const i = tab.sorts.findIndex(s => s.column === col);
+        if (i === -1) tab.sorts.push({ column: col, direction: 'asc' });
+        else if (tab.sorts[i].direction === 'asc') tab.sorts[i].direction = 'desc';
+        else tab.sorts.splice(i, 1);
+        renderTableArea();
+    });
+
+    // Row click → toggle visited (shared across tabs derived from the same table) + open URL
+    table.querySelector('tbody').addEventListener('click', e => {
+        const tr = e.target.closest('tr[data-uid]');
+        if (!tr) return;
+        const uid = tr.dataset.uid, url = tr.dataset.url;
+        tr.classList.toggle('visited');
+        clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
+        try { localStorage.setItem('clickedItems', JSON.stringify([...clickedItems])); } catch (e) {}
+        if (url) window.open(url, '_blank');
+    });
+
+    wrapper.appendChild(table);
+    return wrapper;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CSV / JSON EXPORT
+// ═══════════════════════════════════════════════════════════
+function escCsvField(v) {
+    if (v == null) return '';
+    const s = String(v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+}
+function rowsToCSV(rows, cols) {
+    const header = cols.map(escCsvField).join(',');
+    const lines = rows.map(r => cols.map(c => escCsvField(r[c])).join(','));
+    return [header, ...lines].join('\r\n');
+}
+function triggerDownload(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABLE AREA  (renders only the active tab; runs its SQL each time
+//  so it always reflects the latest loaded data)
+// ═══════════════════════════════════════════════════════════
+function renderTableArea() {
+    const area = document.getElementById('tableArea');
+    area.innerHTML = '';
+
+    if (!tabs.length) {
+        area.innerHTML = `<div class="empty-state"><div class="icon">◈</div><h3>No data loaded</h3><p class="text-dim">Click "Load Data" to open one or more JSON files</p></div>`;
+        document.getElementById('controls').style.display = 'none';
+        return;
+    }
+
+    const tab = tabs.find(t => t.key === activeTabKey) || tabs[0];
+    activeTabKey = tab.key;
+
+    let rows;
+    try {
+        rows = alasql(`SELECT * FROM [${tab.viewName}]`);
+    } catch (e) {
+        document.getElementById('controls').style.display = 'none';
+        area.innerHTML = `<div class="cat-error-banner"><strong>Error running "${esc(tab.label)}":</strong> ${esc(firstLine(e.message))}</div>`;
+        return;
+    }
+    document.getElementById('controls').style.display = '';
+
+    const urlColumn = detectUrlColumn(rows);
+    const skip = new Set(['id', 'url', 'category', 'job_url', 'link', 'href', urlColumn]);
+    const allCols = unionKeys(rows);
+    const cols = allCols.filter(c => !skip.has(c));
+
+    renderColManager(tab, cols);
+
+    const types = {};
+    cols.forEach(c => { types[c] = detectType(c, rows); });
+
+    const visCols = cols.filter(c => !tab.hiddenColumns.has(c));
+    const sorted = sortData(rows, tab.sorts, types);
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'table-section-title';
+    const totalForTable = tab.sourceTable && loadedTables[tab.sourceTable] ? loadedTables[tab.sourceTable].rowCount : null;
+    const countText = totalForTable != null
+        ? `${sorted.length} of ${totalForTable} record${totalForTable !== 1 ? 's' : ''}`
+        : `${sorted.length} record${sorted.length !== 1 ? 's' : ''}`;
+    titleRow.innerHTML = `
+        <span>${esc(tab.label)}</span>
+        <span class="count">${countText}</span>
+        <span class="download-group">
+            <button class="btn btn-outline btn-sm" data-dl="csv" title="Download all columns (including id/url) as CSV, in the current sort order">⬇ CSV</button>
+            <button class="btn btn-outline btn-sm" data-dl="json" title="Download all columns (including id/url) as JSON, in the current sort order">⬇ JSON</button>
+        </span>`;
+    area.appendChild(titleRow);
+    titleRow.querySelector('[data-dl="csv"]').addEventListener('click', () => {
+        triggerDownload(rowsToCSV(sorted, allCols), `${tab.label}.csv`, 'text/csv;charset=utf-8;');
+    });
+    titleRow.querySelector('[data-dl="json"]').addEventListener('click', () => {
+        triggerDownload(JSON.stringify(sorted, null, 2), `${tab.label}.json`, 'application/json;charset=utf-8;');
+    });
+
+    if (tab.kind === 'view') {
+        const info = document.createElement('div');
+        info.className = 'sql-preview';
+        info.innerHTML = `<span class="sql-label">SQL</span><code>${esc(tab.sql)}</code>`;
+        area.appendChild(info);
+    }
+
+    area.appendChild(buildTable(visCols, sorted, tab, urlColumn));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EVENT WIRING
+// ═══════════════════════════════════════════════════════════
+document.getElementById('dataFileInput').addEventListener('change', e => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    Promise.all(files.map(readJsonFile)).then(results => {
+        results.forEach(r => {
+            if (r.error) { alert(`"${r.name}": ${r.error}`); return; }
+            loadJsonTable(r.json, r.name);
+        });
+        renderAll();
+    });
+    e.target.value = '';
+});
+
+document.getElementById('catFileInput').addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => { loadCategoriesFromText(ev.target.result); };
+    reader.onerror = () => alert('Could not read file.');
+    reader.readAsText(file); e.target.value = '';
+});
+
+document.getElementById('clearCatBtn').addEventListener('click', clearCategories);
+
+renderAll();
+</script>
+</body>
+</html>
