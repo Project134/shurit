@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip Catalog — clips.json editor</title>
+<style>
+  :root{
+    --paper: #efe9da;
+    --card: #fbf8f1;
+    --card-line: #eae3d2;
+    --ink: #24303a;
+    --ink-soft: #6b7680;
+    --ink-faint: #98a0a6;
+    --accent: #0f6e5c;
+    --accent-dark: #0b5548;
+    --accent-soft: #e2efec;
+    --highlight: #ffd34d;
+    --highlight-soft: #fff3cf;
+    --danger: #b3261e;
+    --danger-soft: #f8e6e4;
+    --border: #dcd3be;
+    --shadow: 0 1px 2px rgba(36,48,58,.06), 0 6px 16px rgba(36,48,58,.07);
+    --shadow-lg: 0 8px 24px rgba(36,48,58,.14), 0 2px 6px rgba(36,48,58,.08);
+    --radius: 10px;
+    --font-display: 'Iowan Old Style','Palatino Linotype', Palatino, Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body{
+    margin:0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input, textarea { font-family: inherit; }
+  :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #app{ height: 100vh; display: flex; flex-direction: column; }
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 18px;
+    background: var(--ink);
+    color: #f2efe6;
+    flex: 0 0 auto;
+    box-shadow: var(--shadow);
+    z-index: 20;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; font-family: var(--font-display); font-size: 19px; letter-spacing:.2px;}
+  .brand svg{ flex:0 0 auto; }
+  .brand b{ font-weight: 700; color: var(--highlight); }
+  .topbar-actions{ display:flex; align-items:center; gap:10px; flex-wrap: wrap; justify-content:flex-end;}
+  .status-pill{
+    font-size: 12px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.1); color:#d9e6e2; white-space:nowrap;
+  }
+  .status-pill.dirty{ background: var(--highlight); color:#4a3800; font-weight:600; }
+
+  .btn{
+    border: 1px solid transparent; border-radius: 8px; padding: 7px 13px;
+    font-size: 13px; font-weight: 600; display:inline-flex; align-items:center; gap:6px;
+    transition: background .15s, transform .05s, opacity .15s;
+  }
+  .btn:active{ transform: translateY(1px); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-ghost{ background: rgba(255,255,255,.08); color:#f2efe6; border-color: rgba(255,255,255,.18); }
+  .btn-ghost:hover:not(:disabled){ background: rgba(255,255,255,.16); }
+  .btn-primary{ background: var(--highlight); color:#4a3800; }
+  .btn-primary:hover:not(:disabled){ background:#ffcb2e; }
+  .btn-danger{ background: var(--danger); color:#fff; }
+  .btn-danger:hover{ background:#93201a; }
+  .btn-sm{ padding:4px 9px; font-size:12px; }
+
+  .icon-btn{
+    width: 30px; height: 30px; border-radius: 7px; border: 1px solid transparent;
+    background: transparent; display:flex; align-items:center; justify-content:center;
+    color: var(--ink-soft); transition: background .15s, color .15s;
+  }
+  .icon-btn:hover{ background: var(--accent-soft); color: var(--accent-dark); }
+  .icon-btn.danger:hover{ background: var(--danger-soft); color: var(--danger); }
+  .icon-btn svg{ pointer-events:none; }
+
+  /* ---------- Layout ---------- */
+  .reconnect-banner{
+    background: var(--highlight-soft); border-bottom:1px solid #f0d998; color:#5a4400;
+    padding: 8px 18px; font-size: 13px; display:flex; align-items:center; gap: 10px; flex: 0 0 auto;
+  }
+  .reconnect-banner button{ margin-left: auto; }
+
+  .layout{ flex: 1 1 auto; display:grid; grid-template-columns: 300px 1fr 300px; min-height: 0; }
+
+  .pane{ min-height: 0; display:flex; flex-direction:column; overflow: hidden; }
+  .groups-pane{ background: var(--paper); border-right: 1px solid var(--border); }
+  .params-pane{ background: var(--paper); border-left: 1px solid var(--border); }
+  .main-pane{ background: var(--paper); overflow-y: auto; }
+
+  .pane-header{ padding: 12px 14px; display:flex; gap:8px; align-items:center; flex: 0 0 auto; }
+  .pane-header h3{ margin:0; font-family: var(--font-display); font-size: 15px; color: var(--ink-soft); font-weight: 600; letter-spacing:.3px;}
+  .search-input{
+    flex:1; border:1px solid var(--border); background: var(--card); border-radius: 8px;
+    padding: 7px 10px; font-size: 13px; color: var(--ink);
+  }
+
+  /* ---------- Groups (card-catalog drawer) ---------- */
+  .groups-list{ flex:1; overflow-y:auto; padding: 4px 10px 14px; display:flex; flex-direction:column; gap:8px; contain: content; }
+  .group-item{
+    background: var(--card); border: 1px solid var(--card-line); border-radius: var(--radius);
+    padding: 10px 12px 10px 14px; cursor:grab; position:relative; box-shadow: var(--shadow);
+    transition: border-color .15s, transform .1s;
+  }
+  .group-item:before{
+    content:""; position:absolute; left:0; top:10px; bottom:10px; width:4px; border-radius: 3px;
+    background: transparent;
+  }
+  .group-item.active{ border-color: var(--accent); }
+  .group-item.active:before{ background: var(--accent); }
+  .group-item.drag-over{ transform: translateY(2px); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .group-item-top{ display:flex; align-items:flex-start; justify-content:space-between; gap: 6px; }
+  .group-title{ font-family: var(--font-display); font-weight:700; font-size:15px; color: var(--ink); word-break: break-word; }
+  .group-title.untitled{ color: var(--ink-faint); font-style: italic; font-weight: 400; }
+  .group-desc{
+    margin-top:3px; font-size:12.5px; color: var(--ink-soft); line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .group-meta{ margin-top:7px; display:flex; align-items:center; gap:6px; }
+  .page-count-badge{
+    font-size: 10.5px; font-weight:700; letter-spacing:.3px; text-transform:uppercase;
+    color: var(--accent-dark); background: var(--accent-soft); border-radius: 999px; padding:2px 8px;
+  }
+  .empty-hint{ padding: 20px 16px; color: var(--ink-faint); font-size:13px; text-align:center; line-height:1.6; }
+
+  /* ---------- Main pane / empty state ---------- */
+  .main-empty{
+    height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color: var(--ink-faint); text-align:center; padding: 40px; gap:10px;
+  }
+  .main-empty h2{ font-family: var(--font-display); color: var(--ink-soft); font-weight:600; margin:8px 0 0; }
+  .main-empty p{ max-width: 360px; font-size: 13.5px; line-height:1.6; margin:0; }
+
+  .group-detail{ padding: 24px 30px 40px; max-width: 900px; }
+  .group-head{ display:flex; align-items:flex-start; gap: 10px; margin-bottom: 4px; }
+  .field-heading{
+    flex:1; border:none; background:transparent; font-family: var(--font-display); font-weight:700;
+    font-size: 26px; color: var(--ink); padding: 4px 2px; border-radius: 6px;
+  }
+  .field-heading:hover, .field-heading:focus{ background: rgba(255,255,255,.5); }
+  .field-desc{
+    width:100%; border:none; background:transparent; resize:none; font-size: 13.5px; color: var(--ink-soft);
+    padding: 2px 2px 10px; line-height:1.5; min-height: 20px; border-radius:6px;
+  }
+  .field-desc:hover, .field-desc:focus{ background: rgba(255,255,255,.5); }
+
+  /* ---------- Tabs (folder dividers) ---------- */
+  .tabs-row{ display:flex; align-items:flex-end; gap:4px; margin: 18px 0 0; overflow-x:auto; padding-bottom:0; }
+  .tab{
+    position:relative; padding: 8px 16px; font-size:13px; font-weight:600; color: var(--ink-soft);
+    background: #e4dcc6; border: 1px solid var(--border); border-bottom:none;
+    border-radius: 8px 8px 0 0; cursor:grab; white-space:nowrap; display:flex; align-items:center; gap:8px;
+    top: 1px;
+  }
+  .tab.active{ background: var(--card); color: var(--ink); z-index:2; }
+  .tab.drag-over{ box-shadow: -2px 0 0 var(--accent) inset; }
+  .tab input.tab-rename{
+    border:none; background:transparent; font: inherit; color:inherit; width: 110px; padding:0;
+  }
+  .tab .tab-close{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); }
+  .tab .tab-close:hover{ background: var(--danger-soft); color: var(--danger); }
+  .tab .tab-rename-btn{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); flex: 0 0 auto; }
+  .tab .tab-rename-btn:hover{ background: var(--accent-soft); color: var(--accent-dark); }
+  .tab-add{
+    padding: 8px 12px; border-radius: 8px 8px 0 0; border:1px dashed var(--border); background:transparent;
+    color: var(--ink-soft); font-size:13px; font-weight:600; display:flex; align-items:center; gap:5px;
+  }
+  .tab-add:hover{ background: var(--accent-soft); color: var(--accent-dark); border-style:solid; }
+  .no-pages{
+    border:1px dashed var(--border); border-radius: var(--radius); padding: 26px; text-align:center;
+    color: var(--ink-faint); font-size: 13.5px; margin-top: 10px;
+  }
+
+  /* ---------- Index card (content) ---------- */
+  .index-card{
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 0 10px 10px 10px;
+    box-shadow: var(--shadow-lg); position:relative; margin-top:-1px;
+  }
+  .index-card-head{
+    display:flex; align-items:center; justify-content:space-between; padding: 10px 14px;
+    border-bottom: 1px solid var(--card-line);
+  }
+  .index-card-head .left{ display:flex; align-items:center; gap:8px; color: var(--ink-soft); font-size:12.5px; }
+  .index-card-head .actions{ display:flex; align-items:center; gap:4px; }
+  .copy-btn{
+    display:flex; align-items:center; gap:6px; padding: 6px 12px; border-radius:7px;
+    background: var(--accent); color:#fff; font-size:12.5px; font-weight:700; border:none;
+    transition: background .15s;
+  }
+  .copy-btn:hover:not(:disabled){ background: var(--accent-dark); }
+  .copy-btn:disabled{ background:#c8cdc7; color:#f3f3f0; cursor:not-allowed; }
+  .copy-btn.copied{ background:#1a8a4a; }
+
+  .index-card-body{ position:relative; min-height: 220px; }
+  .content-preview, .content-edit{
+    font-family: var(--font-mono); font-size: 13.5px; line-height: 1.8; color: var(--ink);
+    padding: 18px 22px; white-space: pre-wrap; word-break: break-word;
+    background-image: repeating-linear-gradient(var(--card) 0 34px, var(--card-line) 34px 35px);
+    background-attachment: local;
+    min-height: 220px;
+  }
+  .content-edit{ width:100%; border:none; resize:vertical; outline:none; display:block; }
+  .content-preview.is-empty{ color: var(--ink-faint); font-style: italic; background-image:none; }
+  .param-token{
+    background: var(--highlight); color:#4a3800; padding: 1px 4px; border-radius: 4px; font-weight:600;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
+  .param-token.filled{ background: #cdeee0; color: var(--accent-dark); }
+  .param-token-toggle{
+    display:inline; margin-left:5px; padding:0; border:none; background:transparent;
+    color:inherit; font:inherit; font-weight:700; text-decoration:underline; cursor:pointer; opacity:.7;
+  }
+  .param-token-toggle:hover{ opacity:1; }
+
+  /* ---------- Params pane ---------- */
+  .params-body{ flex:1; overflow-y:auto; padding: 4px 16px 20px; display:flex; flex-direction:column; gap:14px; contain: content; }
+  .param-field{ display:flex; flex-direction:column; gap:5px; }
+  .param-field-head{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .param-label{
+    font-family: var(--font-mono); font-size:12px; font-weight:700; color: var(--accent-dark);
+    display:flex; align-items:center; gap:6px; min-width:0; overflow-wrap:anywhere;
+  }
+  .param-label:before{ content:""; width:9px; height:9px; border-radius:2px; background: var(--highlight); display:inline-block; flex:0 0 auto; }
+  .param-file-btn{
+    width:22px; height:22px; border-radius:5px; border:none; background:transparent;
+    color: var(--ink-faint); display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+    transition: background .15s, color .15s;
+  }
+  .param-file-btn:hover{ background: var(--accent-soft); color: var(--accent-dark); }
+  .param-input{
+    border:1px solid var(--border); background: var(--card); border-radius: 7px; padding: 8px 10px;
+    font-size: 13px; font-family: var(--font-mono); color: var(--ink); line-height:1.5;
+    min-height: 36px; max-height: 280px; resize: none; overflow-y: auto; width: 100%;
+  }
+  .param-input:focus{ border-color: var(--accent); }
+  .muted{ color: var(--ink-faint); font-size:13px; line-height:1.6; padding: 6px 2px; }
+
+  /* ---------- Link pills (extracted from @@[label](url)@@ tokens) ---------- */
+  .links-row{ display:flex; flex-wrap:wrap; gap:8px; padding: 14px 22px 0; }
+  .link-pill{
+    display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+    background: var(--accent-soft); color: var(--accent-dark); font-size:12.5px; font-weight:700;
+    border:1px solid transparent; text-decoration:none; transition: background .15s, transform .05s;
+  }
+  .link-pill:hover{ background:#cdeee0; }
+  .link-pill:active{ transform: translateY(1px); }
+  .link-pill svg{ flex:0 0 auto; }
+  .link-pill.unsafe{ background: var(--danger-soft); color: var(--danger); cursor: help; }
+  .link-pill.unsafe:hover{ background: var(--danger-soft); }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background: rgba(36,48,58,.45); display:flex; align-items:center; justify-content:center;
+    z-index: 100; animation: fadeIn .12s ease-out;
+  }
+  .modal{
+    background: var(--card); border-radius: 12px; padding: 22px 24px; max-width: 380px; width: 90%;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal p{ margin:0 0 18px; font-size:14px; color: var(--ink); line-height:1.5; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; }
+  @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+
+  /* ---------- Toasts ---------- */
+  .toast-container{ position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:200; }
+  .toast{
+    background: var(--ink); color:#f2efe6; padding:10px 16px; border-radius:8px; font-size:13px;
+    box-shadow: var(--shadow-lg); opacity:0; transform: translateY(6px); transition: opacity .2s, transform .2s;
+  }
+  .toast.show{ opacity:1; transform: translateY(0); }
+  .toast-success{ background: #1a5c3a; }
+  .toast-error{ background: var(--danger); }
+  .toast-warn{ background: #8a6a1a; }
+
+  /* ---------- Scrollbars ---------- */
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb{ background: #d3c9ac; border-radius:6px; }
+  ::-webkit-scrollbar-track{ background: transparent; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 980px){
+    .layout{ grid-template-columns: 240px 1fr; }
+    .params-pane{ display:none; }
+  }
+  @media (max-width: 680px){
+    .layout{ grid-template-columns: 1fr; }
+    .groups-pane{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="6" y="3" width="12" height="4" rx="1" fill="#ffd34d"/><rect x="4" y="5" width="16" height="16" rx="2" stroke="#f2efe6" stroke-width="1.6"/><path d="M8 12h8M8 16h5" stroke="#f2efe6" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>Clip<b>Catalog</b></span>
+    </div>
+    <div class="topbar-actions">
+      <span id="statusPill" class="status-pill">Loading…</span>
+      <button id="openBtn" class="btn btn-ghost" title="Open clips.json">Open</button>
+      <button id="newBtn" class="btn btn-ghost" title="Start a blank catalog">New</button>
+      <button id="saveBtn" class="btn btn-primary" disabled title="Save — updates clips.json in place once connected (Ctrl/Cmd+S)">Save</button>
+      <input type="file" id="fileInput" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <div id="bannerHost"></div>
+
+  <div class="layout">
+    <aside class="pane groups-pane">
+      <div class="pane-header">
+        <input type="text" id="groupSearch" class="search-input" placeholder="Search groups…">
+        <button id="addGroupBtn" class="icon-btn" title="New group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="groupsList" class="groups-list"></div>
+    </aside>
+
+    <main class="pane main-pane" id="mainPane"></main>
+
+    <aside class="pane params-pane" id="paramsPane"></aside>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     ICONS (static, author-controlled strings — safe as innerHTML)
+     ========================================================= */
+  const ICONS = {
+    trash: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0-1 13a1 1 0 01-1 1H8a1 1 0 01-1-1L6 7h12z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pencil: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    eye: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/></svg>',
+    copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5a2 2 0 012-2h10" stroke="currentColor" stroke-width="1.8"/></svg>',
+    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    close: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    link: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9.5 14.5L14.5 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M11 6.5l1-1a4 4 0 015.5 5.5l-2 2M13 17.5l-1 1A4 4 0 016.5 13l2-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    file: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v12a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    warning: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3.5l9.5 16.5H2.5L12 3.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4.2M12 17h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+  };
+
+  /* =========================================================
+     STATE
+     ========================================================= */
+  const state = {
+    groups: [],
+    currentGroupId: null,
+    currentPageKey: null,
+    fileHandle: null,
+    dirty: false,
+    mode: 'preview',      // 'preview' | 'edit'  (content card)
+    search: '',
+    storageWarningShown: false,
+    paramValues: loadParamValuesFromStorage()
+  };
+
+  const PARAM_RE = /@@([^\n@]+)@@/g;
+  // Link tokens look like @@[Label](https://example.com)@@ — matched and stripped out
+  // BEFORE the parameter regex runs, so a link is never mistaken for a parameter.
+  const LINK_RE = /@@\[([^\]]+)\]\(([^)]+)\)@@/g;
+
+  /* =========================================================
+     UTIL
+     ========================================================= */
+  function generateId(){
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'g_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  }
+  function getCurrentGroup(){
+    return state.groups.find(g => g.id === state.currentGroupId) || null;
+  }
+  function markDirty(){
+    state.dirty = true;
+    renderStatus();
+  }
+  function extractParamNames(text){
+    const names = [];
+    const seen = new Set();
+    let m;
+    PARAM_RE.lastIndex = 0;
+    while ((m = PARAM_RE.exec(text || '')) !== null){
+      const name = m[1].trim();
+      if (name && !seen.has(name)){ seen.add(name); names.push(name); }
+    }
+    return names;
+  }
+  function getFinalText(text, values){
+    return (text || '').replace(PARAM_RE, (whole, rawName) => {
+      const key = rawName.trim();
+      const v = values[key];
+      return (v !== undefined && v !== '') ? v : whole;
+    });
+  }
+  function allParamsFilled(names, values){
+    return names.every(n => values[n] && values[n].trim() !== '');
+  }
+
+  // Pulls @@[Label](url)@@ tokens out of raw page text. Returns the found links plus a
+  // "display" version of the text with those tokens removed (and any blank-line mess
+  // left behind tidied up). The raw text stored in the group is never touched by this —
+  // only what's shown in preview / used for the params panel / copied to the clipboard.
+  function extractLinksAndStrip(text){
+    const links = [];
+    LINK_RE.lastIndex = 0;
+    const stripped = (text || '').replace(LINK_RE, (whole, label, url) => {
+      const cleanLabel = label.trim();
+      const cleanUrl = url.trim();
+      if (cleanLabel && cleanUrl) links.push({ text: cleanLabel, url: cleanUrl });
+      return '';
+    });
+    const display = stripped.replace(/[ \t]*\n{3,}/g, '\n\n').trim();
+    return { links, display };
+  }
+
+  // Security: a link token's URL is user/file-supplied data, and we render it as a real,
+  // clickable <a href>. Without a check, a crafted @@[Click](javascript:...)@@ — whether
+  // typed locally or arriving via a shared/synced clips.json — would run arbitrary script
+  // in this page's context the moment someone clicked the pill. Only allow schemes that are
+  // just navigation (http/https/file/mailto), plus scheme-less relative paths for local
+  // files sitting next to the tool; anything else (javascript:, data:, vbscript:, etc.) is
+  // treated as unsafe and rendered as an inert, clearly-marked pill instead of a link.
+  function isSafeLinkUrl(url){
+    const trimmed = (url || '').trim();
+    if (!trimmed) return false;
+    const schemeMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+    if (!schemeMatch) return true; // no scheme — relative path, resolves within the local folder
+    const scheme = schemeMatch[1].toLowerCase();
+    return scheme === 'http' || scheme === 'https' || scheme === 'file' || scheme === 'mailto';
+  }
+
+  // Parsing a page's raw template (stripping links, finding parameter names) got redone
+  // from scratch on every blur, every render of the params panel, AND every click of Copy —
+  // three or more full passes over potentially huge text for a single user action. Since the
+  // template itself only actually changes while editing raw content, cache the parse and
+  // reuse it as long as the template string hasn't changed. String equality here is cheap:
+  // as long as the content wasn't re-typed, `raw` is the exact same string instance each
+  // time, so JS can short-circuit the comparison by identity instead of scanning it.
+  let pageParseCache = null; // { groupId, pageKey, raw, links, display, names }
+  function getPageParse(group, pageKey){
+    const raw = (group && group.pages[pageKey]) || '';
+    if (pageParseCache &&
+        pageParseCache.groupId === group.id &&
+        pageParseCache.pageKey === pageKey &&
+        pageParseCache.raw === raw){
+      return pageParseCache;
+    }
+    const { links, display } = extractLinksAndStrip(raw);
+    const names = extractParamNames(display);
+    pageParseCache = { groupId: group.id, pageKey, raw, links, display, names };
+    return pageParseCache;
+  }
+
+  // Grows a textarea to fit its content, capped so a very long paste can't turn it (and the
+  // whole page layout around it) into something thousands of pixels tall — that's what was
+  // causing the hang on long parameter values. Past the cap it scrolls internally instead.
+  const PARAM_INPUT_MAX_HEIGHT = 280;
+  function autosizeTextarea(el){
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, PARAM_INPUT_MAX_HEIGHT) + 'px';
+  }
+
+  function loadParamValuesFromStorage(){
+    try { return JSON.parse(localStorage.getItem('cliptool_param_values') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function persistParamValuesNow(){
+    try {
+      localStorage.setItem('cliptool_param_values', JSON.stringify(state.paramValues));
+    } catch(e){
+      // Most likely the storage quota is full (large accumulated parameter values). The
+      // tool keeps working fine for the rest of the session — this only affects whether
+      // values are still there next time the page is opened — so just say so once.
+      if (!state.storageWarningShown){
+        state.storageWarningShown = true;
+        showToast('Parameter values are too large to save locally — they\u2019ll still work for this session', 'warn');
+      }
+    }
+  }
+  // Writing the whole param-values store to localStorage on every single keystroke was the
+  // other big contributor to the hang on long values — coalesce rapid edits into one write.
+  let persistDebounceTimer = null;
+  function persistParamValues(){
+    clearTimeout(persistDebounceTimer);
+    persistDebounceTimer = setTimeout(persistParamValuesNow, 400);
+  }
+  function flushParamValues(){
+    clearTimeout(persistDebounceTimer);
+    persistParamValuesNow();
+  }
+  function getParamValues(groupId, pageKey){
+    if (!state.paramValues[groupId]) state.paramValues[groupId] = {};
+    if (!state.paramValues[groupId][pageKey]) state.paramValues[groupId][pageKey] = {};
+    return state.paramValues[groupId][pageKey];
+  }
+  function setParamValue(groupId, pageKey, name, value){
+    const bucket = getParamValues(groupId, pageKey);
+    bucket[name] = value;
+    persistParamValues();
+  }
+  function renameParamBucket(groupId, oldKey, newKey){
+    if (state.paramValues[groupId] && state.paramValues[groupId][oldKey] !== undefined){
+      state.paramValues[groupId][newKey] = state.paramValues[groupId][oldKey];
+      delete state.paramValues[groupId][oldKey];
+      persistParamValues();
+    }
+  }
+  function deleteParamBucketsForGroup(groupId){
+    delete state.paramValues[groupId];
+    persistParamValues();
+  }
+  function deleteParamBucketForPage(groupId, pageKey){
+    if (state.paramValues[groupId]) delete state.paramValues[groupId][pageKey];
+    persistParamValues();
+  }
+
+  function uniquePageKey(pages, base){
+    let candidate = base, i = 1;
+    while (Object.prototype.hasOwnProperty.call(pages, candidate)){
+      i += 1;
+      candidate = base + ' ' + i;
+    }
+    return candidate;
+  }
+
+  /* =========================================================
+     TOASTS + CONFIRM MODAL
+     ========================================================= */
+  function toastContainer(){
+    let c = document.getElementById('toastContainer');
+    if (!c){
+      c = document.createElement('div');
+      c.id = 'toastContainer';
+      c.className = 'toast-container';
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+  function showToast(message, type){
+    const c = toastContainer();
+    const t = document.createElement('div');
+    t.className = 'toast' + (type ? ' toast-' + type : '');
+    t.textContent = message;
+    c.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(() => t.remove(), 300);
+    }, 2400);
+  }
+  function showConfirm(message, okLabel){
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      const p = document.createElement('p');
+      p.textContent = message;
+      const actions = document.createElement('div');
+      actions.className = 'modal-actions';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn btn-ghost';
+      cancelBtn.style.color = '#24303a';
+      cancelBtn.style.background = '#eee7d6';
+      cancelBtn.textContent = 'Cancel';
+      const okBtn = document.createElement('button');
+      okBtn.className = 'btn btn-danger';
+      okBtn.textContent = okLabel || 'Delete';
+      function close(result){ overlay.remove(); document.removeEventListener('keydown', onKey); resolve(result); }
+      function onKey(e){ if (e.key === 'Escape') close(false); if (e.key === 'Enter') close(true); }
+      cancelBtn.onclick = () => close(false);
+      okBtn.onclick = () => close(true);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+      document.addEventListener('keydown', onKey);
+      actions.append(cancelBtn, okBtn);
+      modal.append(p, actions);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      okBtn.focus();
+    });
+  }
+
+  /* =========================================================
+     COPY
+     ========================================================= */
+  async function copyText(text){
+    try{
+      await navigator.clipboard.writeText(text);
+      return true;
+    }catch(e){
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      }catch(e2){ return false; }
+    }
+  }
+
+  /* =========================================================
+     FILE I/O (File System Access API + fallbacks)
+     ========================================================= */
+  const DB_NAME = 'cliptool-db', STORE = 'handles', HANDLE_KEY = 'clipsHandle';
+  function idbOpen(){
+    return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) { reject(new Error('no idb')); return; }
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, val){
+    try{
+      const db = await idbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(val, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }catch(e){ /* ignore */ }
+  }
+  async function idbGet(key){
+    try{
+      const db = await idbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }catch(e){ return undefined; }
+  }
+
+  function normalizeLoadedGroups(parsed){
+    if (!Array.isArray(parsed)) throw new Error('clips.json must contain a JSON array of groups');
+    return parsed.map(g => {
+      const rawPages = (g && g.pages && typeof g.pages === 'object' && !Array.isArray(g.pages)) ? g.pages : {};
+      const pages = {};
+      // Coerce any non-string page content to a string instead of trusting the file — a
+      // number or object slipping through here would throw later when we call .replace()/
+      // .trim() on it mid-render, taking the whole tool down with it.
+      Object.keys(rawPages).forEach(key => {
+        const v = rawPages[key];
+        pages[key] = (typeof v === 'string') ? v : (v === null || v === undefined ? '' : String(v));
+      });
+      return {
+        id: (g && g.id !== undefined && g.id !== null) ? String(g.id) : generateId(),
+        heading: (g && typeof g.heading === 'string') ? g.heading : '',
+        description: (g && typeof g.description === 'string') ? g.description : '',
+        pages
+      };
+    });
+  }
+
+  function loadGroupsFromText(text){
+    const parsed = JSON.parse(text);
+    state.groups = normalizeLoadedGroups(parsed);
+    state.currentGroupId = state.groups.length ? state.groups[0].id : null;
+    const first = getCurrentGroup();
+    state.currentPageKey = first ? (Object.keys(first.pages)[0] || null) : null;
+    state.mode = 'preview';
+    state.dirty = false;
+    pageParseCache = null; // fresh data — any cached parse from before is no longer relevant
+  }
+
+  function renderStatus(){
+    const pill = document.getElementById('statusPill');
+    const saveBtn = document.getElementById('saveBtn');
+    if (state.dirty){
+      pill.textContent = 'Unsaved changes';
+      pill.classList.add('dirty');
+    } else {
+      pill.classList.remove('dirty');
+      if (pill.dataset.staticText) pill.textContent = pill.dataset.staticText;
+    }
+    saveBtn.disabled = false; // always allow saving/downloading, even to create the first file
+  }
+  function setStaticStatus(text){
+    const pill = document.getElementById('statusPill');
+    pill.dataset.staticText = text;
+    if (!state.dirty) pill.textContent = text;
+  }
+
+  async function tryReconnectHandle(handle){
+    try{
+      let perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted'){
+        perm = await handle.requestPermission({ mode: 'readwrite' });
+      }
+      if (perm !== 'granted') return false;
+      const file = await handle.getFile();
+      const text = await file.text();
+      loadGroupsFromText(text);
+      state.fileHandle = handle;
+      setStaticStatus('Connected to clips.json — autosave enabled');
+      renderAll();
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function showReconnectBanner(handle){
+    const host = document.getElementById('bannerHost');
+    host.innerHTML = '';
+    const bar = document.createElement('div');
+    bar.className = 'reconnect-banner';
+    const span = document.createElement('span');
+    span.textContent = 'A previously connected clips.json was found. Reconnect to load it and enable direct saving.';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary btn-sm';
+    btn.textContent = 'Reconnect';
+    btn.onclick = async () => {
+      const ok = await tryReconnectHandle(handle);
+      if (ok) host.innerHTML = '';
+      else showToast('Could not reconnect — choose the file manually with Open', 'error');
+    };
+    const dismiss = document.createElement('button');
+    dismiss.className = 'icon-btn';
+    dismiss.innerHTML = ICONS.close;
+    dismiss.title = 'Dismiss';
+    dismiss.onclick = () => { host.innerHTML = ''; };
+    bar.append(span, btn, dismiss);
+    host.appendChild(bar);
+  }
+
+  async function openFile(){
+    if ('showOpenFilePicker' in window){
+      try{
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+        });
+        await handle.requestPermission({ mode: 'readwrite' });
+        const file = await handle.getFile();
+        const text = await file.text();
+        loadGroupsFromText(text);
+        state.fileHandle = handle;
+        idbSet(HANDLE_KEY, handle);
+        setStaticStatus('Connected to clips.json — autosave enabled');
+        document.getElementById('bannerHost').innerHTML = '';
+        renderAll();
+        showToast('clips.json loaded', 'success');
+      }catch(e){
+        if (e && e.name !== 'AbortError') showToast('Could not open file', 'error');
+      }
+    } else {
+      document.getElementById('fileInput').click();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try{
+        const text = await file.text();
+        loadGroupsFromText(text);
+        state.fileHandle = null;
+        setStaticStatus('Loaded (read-only) — Save will download a new file');
+        renderAll();
+        showToast('clips.json loaded', 'success');
+      }catch(err){
+        showToast('That file is not valid JSON', 'error');
+      }
+      e.target.value = '';
+    });
+  });
+
+  async function saveData(){
+    let json;
+    try{
+      json = JSON.stringify(state.groups, null, 2);
+    }catch(e){
+      showToast('Could not serialize data', 'error');
+      return;
+    }
+
+    // Case 1: we already have a writable handle (from Open, or a previous Save) — overwrite in place, no dialog.
+    if (state.fileHandle){
+      try{
+        const perm = await state.fileHandle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted'){
+          const req = await state.fileHandle.requestPermission({ mode: 'readwrite' });
+          if (req !== 'granted') throw new Error('permission denied');
+        }
+        const writable = await state.fileHandle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        state.dirty = false;
+        renderStatus();
+        showToast('Saved to clips.json', 'success');
+        return;
+      }catch(e){
+        showToast('Direct save failed — trying another way', 'warn');
+      }
+    }
+
+    // Case 2: no handle yet, but the browser supports picking a file to write to.
+    // Let the person choose (or overwrite) clips.json once; remember the handle so every
+    // save after this is silent and updates that same file — no more piling-up downloads.
+    if ('showSaveFilePicker' in window){
+      try{
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'clips.json',
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        state.fileHandle = handle;
+        idbSet(HANDLE_KEY, handle);
+        state.dirty = false;
+        setStaticStatus('Connected to clips.json — autosave enabled');
+        document.getElementById('bannerHost').innerHTML = '';
+        renderStatus();
+        showToast('Saved. Future saves will update this same file directly.', 'success');
+        return;
+      }catch(e){
+        if (e && e.name === 'AbortError') return; // person cancelled the picker — do nothing further
+        // fall through to plain download as a last resort
+      }
+    }
+
+    // Case 3: browser has no File System Access support (e.g. Firefox, Safari) — download is the only option.
+    downloadJson(json);
+  }
+  function downloadJson(json){
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'clips.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    state.dirty = false;
+    renderStatus();
+    showToast('clips.json downloaded — replace the old file with this one', 'info');
+  }
+
+  async function startNew(){
+    const proceed = state.groups.length === 0 || await showConfirm('Start a new, empty catalog? Unsaved changes will be lost.', 'Start new');
+    if (!proceed) return;
+    state.groups = [];
+    state.currentGroupId = null;
+    state.currentPageKey = null;
+    state.fileHandle = null;
+    state.dirty = false;
+    setStaticStatus('New catalog — not yet saved');
+    renderAll();
+  }
+
+  async function init(){
+    setStaticStatus('No file loaded');
+    // 1. Try a remembered File System Access handle.
+    try{
+      const handle = await idbGet(HANDLE_KEY);
+      if (handle){
+        const perm = await handle.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted'){
+          const ok = await tryReconnectHandle(handle);
+          if (ok) return;
+        } else {
+          showReconnectBanner(handle);
+        }
+      }
+    }catch(e){ /* ignore */ }
+
+    // 2. Try a same-folder fetch (works when served over http/https).
+    try{
+      const res = await fetch('clips.json', { cache: 'no-store' });
+      if (res.ok){
+        const text = await res.text();
+        try{
+          loadGroupsFromText(text);
+          setStaticStatus('Loaded clips.json (read-only) — click Open to enable saving');
+          renderAll();
+          return;
+        }catch(parseErr){
+          showToast('Found clips.json, but it is not valid JSON', 'error');
+        }
+      }
+    }catch(e){ /* likely blocked on file:// — fall through */ }
+
+    // 3. Nothing loaded automatically.
+    state.groups = [];
+    renderAll();
+  }
+
+  /* =========================================================
+     RENDER: GROUPS LIST
+     ========================================================= */
+  let dragGroupIndex = null;
+
+  // Renaming or re-describing a group while it's selected used to rebuild the entire groups
+  // list on every keystroke. For a handful of groups that's harmless, but it's needless work
+  // that scales with how many groups exist — just touch the one row that actually changed.
+  function updateGroupListItemText(group){
+    const item = document.querySelector('.group-item[data-group-id="' + CSS.escape(group.id) + '"]');
+    if (!item) return; // not currently rendered (e.g. filtered out by search) — fine
+    const titleEl = item.querySelector('.group-title');
+    if (titleEl){
+      titleEl.textContent = group.heading || 'Untitled group';
+      titleEl.classList.toggle('untitled', !group.heading);
+    }
+    const descEl = item.querySelector('.group-desc');
+    if (descEl) descEl.textContent = group.description || '';
+  }
+
+  function renderGroupsList(){
+    const list = document.getElementById('groupsList');
+    list.innerHTML = '';
+    const q = state.search.trim().toLowerCase();
+    const filtered = state.groups
+      .map((g, idx) => ({ g, idx }))
+      .filter(({ g }) => !q || (g.heading || '').toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q));
+
+    if (state.groups.length === 0){
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No groups yet. Click the + above, or open a clips.json file.';
+      list.appendChild(hint);
+      return;
+    }
+    if (filtered.length === 0){
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No groups match your search.';
+      list.appendChild(hint);
+      return;
+    }
+
+    filtered.forEach(({ g, idx }) => {
+      const item = document.createElement('div');
+      item.className = 'group-item' + (g.id === state.currentGroupId ? ' active' : '');
+      item.draggable = true;
+      item.dataset.index = String(idx);
+      item.dataset.groupId = g.id;
+
+      const top = document.createElement('div');
+      top.className = 'group-item-top';
+      const title = document.createElement('div');
+      title.className = 'group-title' + (!g.heading ? ' untitled' : '');
+      title.textContent = g.heading || 'Untitled group';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'icon-btn danger';
+      delBtn.title = 'Delete group';
+      delBtn.innerHTML = ICONS.trash;
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const ok = await showConfirm('Delete "' + (g.heading || 'Untitled group') + '" and all its pages? This cannot be undone.', 'Delete group');
+        if (!ok) return;
+        deleteGroup(g.id);
+      });
+      top.append(title, delBtn);
+
+      const desc = document.createElement('div');
+      desc.className = 'group-desc';
+      desc.textContent = g.description || '';
+
+      const meta = document.createElement('div');
+      meta.className = 'group-meta';
+      const count = Object.keys(g.pages || {}).length;
+      const badge = document.createElement('span');
+      badge.className = 'page-count-badge';
+      badge.textContent = count + (count === 1 ? ' page' : ' pages');
+      meta.appendChild(badge);
+
+      item.append(top, desc, meta);
+      item.addEventListener('click', () => selectGroup(g.id));
+
+      item.addEventListener('dragstart', (e) => {
+        dragGroupIndex = idx;
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        item.classList.add('drag-over');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.classList.remove('drag-over');
+        const targetIndex = idx;
+        if (dragGroupIndex === null || dragGroupIndex === targetIndex) return;
+        const moved = state.groups.splice(dragGroupIndex, 1)[0];
+        state.groups.splice(targetIndex, 0, moved);
+        dragGroupIndex = null;
+        markDirty();
+        renderGroupsList();
+      });
+
+      list.appendChild(item);
+    });
+  }
+
+  function selectGroup(id){
+    state.currentGroupId = id;
+    const g = getCurrentGroup();
+    const keys = g ? Object.keys(g.pages) : [];
+    state.currentPageKey = keys.length ? keys[0] : null;
+    state.mode = 'preview';
+    renderGroupsList();
+    renderMain();
+    renderParams();
+  }
+
+  function addGroup(){
+    const g = { id: generateId(), heading: 'New group', description: '', pages: {} };
+    state.groups.unshift(g);
+    markDirty();
+    selectGroup(g.id);
+    requestAnimationFrame(() => {
+      const el = document.getElementById('headingField');
+      if (el){ el.focus(); el.select(); }
+    });
+  }
+
+  function deleteGroup(id){
+    const idx = state.groups.findIndex(g => g.id === id);
+    if (idx === -1) return;
+    state.groups.splice(idx, 1);
+    deleteParamBucketsForGroup(id);
+    if (state.currentGroupId === id){
+      state.currentGroupId = state.groups.length ? state.groups[0].id : null;
+      const g = getCurrentGroup();
+      state.currentPageKey = g ? (Object.keys(g.pages)[0] || null) : null;
+    }
+    markDirty();
+    renderAll();
+  }
+
+  /* =========================================================
+     RENDER: MAIN PANE (group detail: header + tabs + card)
+     ========================================================= */
+  let dragTabKey = null;
+
+  function renderMain(){
+    const main = document.getElementById('mainPane');
+    main.innerHTML = '';
+    const group = getCurrentGroup();
+
+    if (!group){
+      const empty = document.createElement('div');
+      empty.className = 'main-empty';
+      empty.innerHTML =
+        '<svg width="46" height="46" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8M8 16h5M8 8h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+      const h2 = document.createElement('h2'); h2.textContent = 'No group selected';
+      const p = document.createElement('p'); p.textContent = 'Pick a group from the catalog on the left, or create a new one to start adding clips.';
+      empty.append(h2, p);
+      main.appendChild(empty);
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'group-detail';
+
+    // heading / description
+    const head = document.createElement('div');
+    head.className = 'group-head';
+    const headingInput = document.createElement('input');
+    headingInput.id = 'headingField';
+    headingInput.className = 'field-heading';
+    headingInput.value = group.heading;
+    headingInput.placeholder = 'Group name';
+    headingInput.addEventListener('input', () => {
+      group.heading = headingInput.value;
+      markDirty();
+      updateGroupListItemText(group); // touch just this one row, not the whole list
+    });
+    head.appendChild(headingInput);
+    wrap.appendChild(head);
+
+    const descInput = document.createElement('textarea');
+    descInput.className = 'field-desc';
+    descInput.rows = 1;
+    descInput.value = group.description;
+    descInput.placeholder = 'Description of this group…';
+    descInput.addEventListener('input', () => {
+      group.description = descInput.value;
+      markDirty();
+      updateGroupListItemText(group);
+    });
+    wrap.appendChild(descInput);
+
+    // tabs
+    const tabsRow = document.createElement('div');
+    tabsRow.className = 'tabs-row';
+    const keys = Object.keys(group.pages);
+
+    keys.forEach((key) => {
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (key === state.currentPageKey ? ' active' : '');
+      tab.draggable = true;
+      tab.dataset.key = key;
+
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = key;
+
+      const renameBtn = document.createElement('span');
+      renameBtn.className = 'tab-rename-btn';
+      renameBtn.innerHTML = ICONS.pencil;
+      renameBtn.title = 'Rename page';
+      renameBtn.addEventListener('click', (e) => {
+        // Stop this from also bubbling into the tab's own click handler below —
+        // that handler re-renders the tab row, which would rip out the rename
+        // input the instant it appeared.
+        e.stopPropagation();
+        startRenamePage(tab, group, key);
+      });
+
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'tab-close';
+      closeBtn.innerHTML = ICONS.close;
+      closeBtn.title = 'Delete page';
+      closeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const ok = await showConfirm('Delete page "' + key + '"?', 'Delete page');
+        if (!ok) return;
+        deletePage(group, key);
+      });
+
+      tab.append(label, renameBtn, closeBtn);
+      tab.addEventListener('click', () => {
+        state.currentPageKey = key;
+        state.mode = 'preview';
+        renderMain();
+        renderParams();
+      });
+
+      tab.addEventListener('dragstart', (e) => {
+        dragTabKey = key;
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      tab.addEventListener('dragover', (e) => { e.preventDefault(); tab.classList.add('drag-over'); });
+      tab.addEventListener('dragleave', () => tab.classList.remove('drag-over'));
+      tab.addEventListener('drop', (e) => {
+        e.preventDefault();
+        tab.classList.remove('drag-over');
+        if (dragTabKey === null || dragTabKey === key) return;
+        reorderPages(group, dragTabKey, key);
+        dragTabKey = null;
+        markDirty();
+        renderMain();
+      });
+
+      tabsRow.appendChild(tab);
+    });
+
+    const addTabBtn = document.createElement('button');
+    addTabBtn.className = 'tab-add';
+    addTabBtn.innerHTML = ICONS.plus + '<span>Page</span>';
+    addTabBtn.addEventListener('click', () => addPage(group));
+    tabsRow.appendChild(addTabBtn);
+
+    wrap.appendChild(tabsRow);
+
+    // content card or empty state
+    if (keys.length === 0){
+      const noPages = document.createElement('div');
+      noPages.className = 'no-pages';
+      noPages.textContent = 'This group has no pages yet. Click "+ Page" above to add the first one.';
+      wrap.appendChild(noPages);
+    } else {
+      wrap.appendChild(renderIndexCard(group));
+    }
+
+    main.appendChild(wrap);
+  }
+
+  function startRenamePage(tabEl, group, oldKey){
+    tabEl.innerHTML = '';
+    tabEl.draggable = false; // avoid fighting with text selection while the input is open
+    const input = document.createElement('input');
+    input.className = 'tab-rename';
+    input.value = oldKey;
+    // Clicking inside the input to move the cursor would otherwise bubble up to the
+    // tab's own click handler and re-render the tab row out from under it.
+    input.addEventListener('mousedown', (e) => e.stopPropagation());
+    input.addEventListener('click', (e) => e.stopPropagation());
+    tabEl.appendChild(input);
+    input.focus();
+    input.select();
+    function commit(){
+      let newKey = input.value.trim();
+      if (!newKey) newKey = oldKey;
+      if (newKey !== oldKey){
+        if (Object.prototype.hasOwnProperty.call(group.pages, newKey)){
+          newKey = uniquePageKey(group.pages, newKey);
+        }
+        renamePageKey(group, oldKey, newKey);
+      }
+      renderMain();
+      renderParams();
+    }
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape'){ input.value = oldKey; input.blur(); }
+    });
+    input.addEventListener('blur', commit);
+  }
+
+  function renamePageKey(group, oldKey, newKey){
+    const rebuilt = {};
+    Object.keys(group.pages).forEach(k => {
+      if (k === oldKey) rebuilt[newKey] = group.pages[oldKey];
+      else rebuilt[k] = group.pages[k];
+    });
+    group.pages = rebuilt;
+    renameParamBucket(group.id, oldKey, newKey);
+    if (state.currentPageKey === oldKey) state.currentPageKey = newKey;
+    markDirty();
+  }
+
+  function reorderPages(group, movedKey, targetKey){
+    const keys = Object.keys(group.pages);
+    const fromIdx = keys.indexOf(movedKey);
+    const toIdx = keys.indexOf(targetKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+    keys.splice(toIdx, 0, keys.splice(fromIdx, 1)[0]);
+    const rebuilt = {};
+    keys.forEach(k => { rebuilt[k] = group.pages[k]; });
+    group.pages = rebuilt;
+  }
+
+  function addPage(group){
+    const key = uniquePageKey(group.pages, 'New page');
+    group.pages[key] = '';
+    state.currentPageKey = key;
+    state.mode = 'edit';
+    markDirty();
+    renderMain();
+    renderParams();
+    requestAnimationFrame(() => {
+      const ta = document.getElementById('contentEdit');
+      if (ta) ta.focus();
+    });
+  }
+
+  function deletePage(group, key){
+    delete group.pages[key];
+    deleteParamBucketForPage(group.id, key);
+    if (state.currentPageKey === key){
+      const remaining = Object.keys(group.pages);
+      state.currentPageKey = remaining.length ? remaining[0] : null;
+    }
+    markDirty();
+    renderMain();
+    renderParams();
+  }
+
+  /* =========================================================
+     RENDER: INDEX CARD (page content, preview/edit, copy)
+     ========================================================= */
+  let renderParamsDebounce = null;
+
+  function renderIndexCard(group){
+    const card = document.createElement('div');
+    card.className = 'index-card';
+
+    const head = document.createElement('div');
+    head.className = 'index-card-head';
+
+    const left = document.createElement('div');
+    left.className = 'left';
+    left.textContent = state.currentPageKey || '';
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'icon-btn';
+    toggleBtn.title = state.mode === 'edit' ? 'Preview' : 'Edit content';
+    toggleBtn.innerHTML = state.mode === 'edit' ? ICONS.eye : ICONS.pencil;
+    toggleBtn.addEventListener('click', () => {
+      state.mode = state.mode === 'edit' ? 'preview' : 'edit';
+      renderMain();
+    });
+
+    const copyBtn = document.createElement('button');
+    copyBtn.id = 'copyBtn';
+    copyBtn.className = 'copy-btn';
+    copyBtn.innerHTML = ICONS.copy + '<span>Copy</span>';
+    copyBtn.addEventListener('click', async () => {
+      if (copyBtn.disabled) return;
+      // Reuses the cached parse of this page's template (see getPageParse) — the template
+      // itself hasn't changed since the last blur/render, so this is just a values lookup
+      // and one substitution pass, not another full scan of potentially huge text.
+      const { display } = getPageParse(group, state.currentPageKey);
+      const values = getParamValues(group.id, state.currentPageKey);
+      const final = getFinalText(display, values);
+      const ok = await copyText(final);
+      if (ok){
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = ICONS.check + '<span>Copied</span>';
+        showToast('Copied to clipboard', 'success');
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = ICONS.copy + '<span>Copy</span>';
+        }, 1400);
+      } else {
+        showToast('Copy failed — clipboard access blocked by the browser', 'error');
+      }
+    });
+
+    actions.append(toggleBtn, copyBtn);
+    head.append(left, actions);
+    card.appendChild(head);
+
+    const rawText = group.pages[state.currentPageKey] || '';
+    const { links, display: displayText } = getPageParse(group, state.currentPageKey);
+
+    if (state.mode === 'edit'){
+      // Edit mode shows the raw source, @@[label](url)@@ tokens and all — this is the
+      // single source of truth that gets saved. Link pills only render in preview, since
+      // rebuilding them on every keystroke here would fight the textarea's own focus/cursor.
+      const body = document.createElement('div');
+      body.className = 'index-card-body';
+      const ta = document.createElement('textarea');
+      ta.id = 'contentEdit';
+      ta.className = 'content-edit';
+      ta.rows = 12;
+      ta.value = rawText;
+      ta.placeholder = 'Type the clip content here. Mark a fill-in value with @@parameter_name@@, or a link with @@[Label](https://example.com)@@.';
+      ta.addEventListener('input', () => {
+        group.pages[state.currentPageKey] = ta.value;
+        markDirty();
+        // Debounced together: re-checking the copy button re-parses the template (link
+        // stripping + parameter scan), same cost as rebuilding the params panel, so no
+        // reason to pay that twice per pause in typing.
+        clearTimeout(renderParamsDebounce);
+        renderParamsDebounce = setTimeout(() => {
+          renderParams();
+          updateCopyButtonState();
+        }, 150);
+      });
+      body.appendChild(ta);
+      card.appendChild(body);
+    } else {
+      if (links.length){
+        const linksRow = document.createElement('div');
+        linksRow.className = 'links-row';
+        links.forEach(link => {
+          const safe = isSafeLinkUrl(link.url);
+          const el = document.createElement(safe ? 'a' : 'span');
+          el.className = 'link-pill' + (safe ? '' : ' unsafe');
+          if (safe){
+            el.href = link.url;
+            el.target = '_blank';
+            el.rel = 'noopener noreferrer';
+            el.title = link.url;
+          } else {
+            el.title = 'Blocked: "' + link.url + '" is not a web link or local file path';
+          }
+          const icon = document.createElement('span');
+          icon.innerHTML = safe ? ICONS.link : ICONS.warning;
+          const label = document.createElement('span');
+          label.textContent = link.text;
+          el.append(icon, label);
+          linksRow.appendChild(el);
+        });
+        card.appendChild(linksRow);
+      }
+
+      const body = document.createElement('div');
+      body.className = 'index-card-body';
+      const preview = document.createElement('div');
+      preview.id = 'contentPreview';
+      preview.className = 'content-preview' + (rawText.trim() === '' ? ' is-empty' : '');
+      if (rawText.trim() === ''){
+        preview.textContent = 'This page is empty. Click the pencil icon to add content.';
+      } else {
+        const values = getParamValues(group.id, state.currentPageKey);
+        renderContentPreview(preview, displayText, values, group, state.currentPageKey);
+      }
+      body.appendChild(preview);
+      card.appendChild(body);
+    }
+
+    updateCopyButtonStateFor(copyBtn, group);
+    return card;
+  }
+
+  // The preview highlights a parameter's value inline, but inserting an 8,000-word string
+  // into an already-laid-out DOM tree forces the browser to re-flow text around it — real,
+  // unavoidable cost that a plain in-memory string never pays. Since the preview only needs
+  // to *show* the value, not *be* it, cap what actually goes into the DOM by default; the
+  // full value is always what's stored and what gets copied — truncation only ever affects
+  // what's drawn on screen, and a "Load more" toggle lets you see the rest when you want to.
+  const PREVIEW_VALUE_TRUNCATE_AT = 400;
+
+  // Which (group, page, parameter) values are currently expanded to full length in the
+  // preview — plain in-memory UI state, not saved anywhere. Keyed as "groupId::pageKey::name".
+  const expandedParamKeys = new Set();
+  function paramExpandKey(groupId, pageKey, name){ return groupId + '::' + pageKey + '::' + name; }
+  function isParamExpanded(groupId, pageKey, name){ return expandedParamKeys.has(paramExpandKey(groupId, pageKey, name)); }
+  function toggleParamExpanded(groupId, pageKey, name){
+    const key = paramExpandKey(groupId, pageKey, name);
+    if (expandedParamKeys.has(key)) expandedParamKeys.delete(key);
+    else expandedParamKeys.add(key);
+  }
+
+  // Fills one highlighted token span with either the truncated or full value, plus a
+  // "Load more" / "Show less" toggle when the value is long enough to have been cut down.
+  // Shared by the initial preview render and by the targeted per-parameter update, so both
+  // behave identically and both respect whatever expand state is currently set.
+  function fillParamTokenSpan(span, group, pageKey, name, value){
+    span.textContent = '';
+    span.dataset.paramName = name;
+    span.classList.toggle('filled', !!value);
+    if (!value){
+      span.appendChild(document.createTextNode('@@' + name + '@@'));
+      return;
+    }
+    const isLong = value.length > PREVIEW_VALUE_TRUNCATE_AT;
+    const expanded = !isLong || isParamExpanded(group.id, pageKey, name);
+    const shown = expanded ? value : value.slice(0, PREVIEW_VALUE_TRUNCATE_AT) + '…';
+    span.appendChild(document.createTextNode(shown));
+    if (isLong){
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'param-token-toggle';
+      toggle.textContent = expanded ? 'Show less' : 'Load more (+' + (value.length - PREVIEW_VALUE_TRUNCATE_AT).toLocaleString() + ')';
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleParamExpanded(group.id, pageKey, name);
+        const container = document.getElementById('contentPreview');
+        if (container) updateParamTokensInPreview(container, group, pageKey, name, value);
+      });
+      span.appendChild(toggle);
+    }
+  }
+
+  function renderContentPreview(container, text, values, group, pageKey){
+    container.innerHTML = '';
+    let lastIndex = 0;
+    let m;
+    PARAM_RE.lastIndex = 0;
+    while ((m = PARAM_RE.exec(text)) !== null){
+      if (m.index > lastIndex) container.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
+      const name = m[1].trim();
+      const span = document.createElement('span');
+      span.className = 'param-token';
+      span.title = 'Parameter: ' + name;
+      fillParamTokenSpan(span, group, pageKey, name, values[name]);
+      container.appendChild(span);
+      lastIndex = PARAM_RE.lastIndex;
+    }
+    if (lastIndex < text.length) container.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+
+  // Updates just the spots in the preview for one parameter, instead of re-parsing and
+  // rebuilding the whole page's content on every keystroke — that full rebuild was the main
+  // cause of the hang when a page or a parameter value ran to thousands of words.
+  function updateParamTokensInPreview(container, group, pageKey, name, value){
+    if (!container) return;
+    const spans = container.querySelectorAll('.param-token[data-param-name="' + CSS.escape(name) + '"]');
+    spans.forEach(span => fillParamTokenSpan(span, group, pageKey, name, value));
+  }
+
+  // The single place a parameter's value actually "lands": puts it in the input, saves it,
+  // and refreshes the preview + copy button. Used both when a field loses focus and when a
+  // file is loaded into it, so both paths behave identically.
+  function commitParamValue(group, pageKey, name, input, value){
+    input.value = value;
+    setParamValue(group.id, pageKey, name, value); // already persists to localStorage in the background
+    updateCopyButtonState();
+    if (state.mode === 'preview' && pageKey === state.currentPageKey){
+      const preview = document.getElementById('contentPreview');
+      if (preview) updateParamTokensInPreview(preview, group, pageKey, name, value);
+    }
+  }
+
+  function updateCopyButtonState(){
+    const group = getCurrentGroup();
+    const btn = document.getElementById('copyBtn');
+    if (!btn || !group || !state.currentPageKey) return;
+    updateCopyButtonStateFor(btn, group);
+  }
+  function updateCopyButtonStateFor(btn, group){
+    if (!btn || !group) return;
+    const { display, names } = getPageParse(group, state.currentPageKey);
+    const values = getParamValues(group.id, state.currentPageKey);
+    // display is already trimmed by getPageParse/extractLinksAndStrip — no need to re-scan it.
+    btn.disabled = display.length === 0 || !allParamsFilled(names, values);
+  }
+
+  /* =========================================================
+     RENDER: PARAMS PANE
+     ========================================================= */
+  function renderParams(){
+    const pane = document.getElementById('paramsPane');
+    pane.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'pane-header';
+    const h3 = document.createElement('h3');
+    h3.textContent = 'Parameters';
+    header.appendChild(h3);
+    pane.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'params-body';
+    pane.appendChild(body);
+
+    const group = getCurrentGroup();
+    if (!group || !state.currentPageKey){
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.textContent = 'Select a page to see its fill-in parameters here.';
+      body.appendChild(p);
+      return;
+    }
+
+    const { names } = getPageParse(group, state.currentPageKey); // links are never parameters
+    if (names.length === 0){
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.textContent = 'No parameters in this page. Mark one by writing @@name@@ in the content.';
+      body.appendChild(p);
+      updateCopyButtonState();
+      return;
+    }
+
+    const values = getParamValues(group.id, state.currentPageKey);
+    names.forEach(name => {
+      const field = document.createElement('div');
+      field.className = 'param-field';
+
+      const input = document.createElement('textarea');
+      input.rows = 1;
+      input.className = 'param-input';
+      input.value = values[name] || '';
+      input.placeholder = 'Value for ' + name;
+
+      const head = document.createElement('div');
+      head.className = 'param-field-head';
+      const label = document.createElement('label');
+      label.className = 'param-label';
+      label.textContent = name;
+
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.hidden = true;
+      // Broad but not unlimited — steers people toward plain text-ish files, since a binary
+      // file (image, zip, etc.) read as text would just paste in garbage.
+      fileInput.accept = '.txt,.md,.markdown,.csv,.tsv,.json,.log,.xml,.yml,.yaml,.ini,.conf,.html,.htm,.css,.js,.ts,.py,.java,.c,.cpp,.h,.sql,.sh,text/plain';
+
+      const fileBtn = document.createElement('button');
+      fileBtn.type = 'button';
+      fileBtn.className = 'param-file-btn';
+      fileBtn.title = 'Fill from a text file';
+      fileBtn.innerHTML = ICONS.file;
+      fileBtn.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files && fileInput.files[0];
+        fileInput.value = ''; // so picking the same file again still fires 'change'
+        if (!file) return;
+        try{
+          const content = await file.text();
+          commitParamValue(group, state.currentPageKey, name, input, content);
+          lastCommittedValue = content;
+          // Unlike typing, this value never fired an 'input' event, so it was never
+          // auto-sized live — do that once here now that the input actually has it.
+          autosizeTextarea(input);
+          showToast('Loaded "' + file.name + '" into ' + name, 'success');
+        }catch(e){
+          showToast('Could not read that file as text', 'error');
+        }
+      });
+
+      head.append(label, fileBtn);
+      field.append(head, input, fileInput);
+
+      let lastCommittedValue = input.value;
+      input.addEventListener('input', () => {
+        // Keep the underlying data and the input's own size live as you type...
+        setParamValue(group.id, state.currentPageKey, name, input.value);
+        autosizeTextarea(input);
+      });
+      input.addEventListener('blur', () => {
+        // ...but only push the change into the preview window and re-check the copy
+        // button once you click (or tab) out, instead of on every keystroke. And if you
+        // click straight back out without changing anything (e.g. clicking Copy right
+        // after this field already synced on its last keystroke), skip the work entirely.
+        if (input.value === lastCommittedValue) return;
+        lastCommittedValue = input.value;
+        commitParamValue(group, state.currentPageKey, name, input, input.value);
+      });
+
+      body.appendChild(field);
+    });
+    updateCopyButtonState();
+    // Size every parameter textarea to fit its current value now that they're all in the DOM.
+    body.querySelectorAll('.param-input').forEach(autosizeTextarea);
+  }
+
+  /* =========================================================
+     TOP-LEVEL RENDER + WIRING
+     ========================================================= */
+  function renderAll(){
+    renderGroupsList();
+    renderMain();
+    renderParams();
+    renderStatus();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('addGroupBtn').addEventListener('click', addGroup);
+    document.getElementById('openBtn').addEventListener('click', openFile);
+    document.getElementById('newBtn').addEventListener('click', startNew);
+    document.getElementById('saveBtn').addEventListener('click', saveData);
+    document.getElementById('groupSearch').addEventListener('input', (e) => {
+      state.search = e.target.value;
+      renderGroupsList();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && e.key.toLowerCase() === 's'){
+        e.preventDefault();
+        saveData();
+      }
+    });
+
+    window.addEventListener('beforeunload', (e) => {
+      flushParamValues();
+      if (state.dirty){
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    init();
+  });
+})();
+</script>
+</body>
+</html>
