@@ -125,6 +125,8 @@
     .tab-close { font-size:13px; opacity:.55; line-height:1; padding:0 1px; border-radius:3px; }
     .tab-close:hover { opacity:1; color:var(--danger); }
     .tab-label { cursor:text; }
+    .tab-rename-icon { font-size:11px; opacity:.45; line-height:1; padding:1px 2px; border-radius:3px; }
+    .tab-rename-icon:hover { opacity:1; color:var(--accent); }
     .tab-rename-input { font-family:var(--mono); font-size:12px; background:var(--surface); color:var(--text-head); border:1px solid var(--accent); border-radius:3px; padding:1px 5px; width:120px; outline:none; }
 
     .cat-hint { padding:10px 14px; background:var(--surface); border:1px dashed var(--border); border-radius:8px; margin:10px 0; font-size:12px; color:var(--text-dim); line-height:1.6; }
@@ -205,7 +207,7 @@
     <div id="tablePillsCard" class="card" style="display:none">
         <div class="card-header">
             <strong>🗂 Loaded Tables</strong>
-            <span class="text-dim text-sm">Click a table to copy its name, then its columns (one per line) — handy for writing SQL below. Double-click a tab below to rename it.</span>
+            <span class="text-dim text-sm">Click a table to copy its name, then its columns (one per line) — handy for writing SQL below. Click the ✎ on a tab below to rename it.</span>
         </div>
         <div class="card-body"><div id="tablePillsWrap"></div></div>
     </div>
@@ -877,16 +879,29 @@ function renderTabBar() {
         const btn = document.createElement('button');
         btn.className = 'tab-btn' + (tab.key === activeTabKey ? ' active' : '');
         btn.dataset.key = tab.key;
-        btn.title = 'Double-click the name to rename this tab';
 
         const label = document.createElement('span');
         label.className = 'tab-label';
         label.textContent = tab.label;
+        label.title = 'Double-click to rename';
         label.addEventListener('dblclick', ev => {
             ev.stopPropagation();
             beginRenameTab(tab, btn, label);
         });
         btn.appendChild(label);
+
+        // Explicit, always-visible rename affordance — more reliable than double-click,
+        // especially on touch devices where a double-tap is often eaten by page-zoom
+        // instead of producing a real "dblclick" event.
+        const rename = document.createElement('span');
+        rename.className = 'tab-rename-icon';
+        rename.textContent = '✎';
+        rename.title = 'Rename tab';
+        rename.addEventListener('click', ev => {
+            ev.stopPropagation();
+            beginRenameTab(tab, btn, label);
+        });
+        btn.appendChild(rename);
 
         if (tab.kind === 'view') {
             const close = document.createElement('span');
