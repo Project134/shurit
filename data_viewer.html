@@ -207,7 +207,7 @@
     <div id="tablePillsCard" class="card" style="display:none">
         <div class="card-header">
             <strong>🗂 Loaded Tables</strong>
-            <span class="text-dim text-sm">Click a table to copy its name, then its columns (one per line) — handy for writing SQL below. Click the ✎ on a tab below to rename it.</span>
+            <span class="text-dim text-sm">Click a table to copy its name, then its columns (one per line) — handy for writing SQL below. Click the ✎ on a tab below to rename the table itself (SQL views can then reference the new name); any already-loaded view built on it will need reloading.</span>
         </div>
         <div class="card-body"><div id="tablePillsWrap"></div></div>
     </div>
@@ -531,6 +531,29 @@ function guessPrimaryTable(sql) {
         return null;
     } catch (e) { return null; }
 }
+function viewReferencesAny(sql, identifiers) {
+    // Non-throwing cousin of validateFromTargets: true if this SELECT reads from any
+    // table/view identifier in the given set, anywhere (FROM, JOIN, subquery, UNION branch).
+    // Used to find views that would break when a table/view they depend on is renamed.
+    let found = false;
+    function walk(node) {
+        if (!node || typeof node !== 'object' || found) return;
+        const targets = [];
+        if (Array.isArray(node.from))  targets.push(...node.from);
+        if (Array.isArray(node.joins)) node.joins.forEach(j => targets.push(j.table));
+        if (Array.isArray(node.queries)) node.queries.forEach(walk);
+        targets.forEach(t => {
+            if (!t || found) return;
+            if (t.tableid && identifiers.has(t.tableid)) found = true;
+            else if (t.from || t.columns) walk(t);
+        });
+    }
+    try {
+        const ast = alasql.parse(sql);
+        (ast.statements || []).forEach(walk);
+    } catch (e) { /* if it no longer parses, best-effort: don't flag it */ }
+    return found;
+}
 
 // ═══════════════════════════════════════════════════════════
 //  ALASQL TABLE / VIEW MANAGEMENT
@@ -620,6 +643,105 @@ function loadJsonTable(json, rawName, sourceFiles) {
         tabs.push(tab);
     }
     if (!activeTabKey) activeTabKey = tabKey;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENAMING  (a genuine rename of the underlying AlaSQL identifier — not just
+//  a cosmetic label — so category SQL can reference the new name directly.
+//  Any already-loaded view that depends on the renamed table/view is dropped
+//  and reported, since its SQL text still points at the old identifier.)
+// ═══════════════════════════════════════════════════════════
+function performRename(tab, newRawLabel) {
+    const trimmed = String(newRawLabel).trim();
+    if (!trimmed) return { ok: false, error: 'Name cannot be empty.' };
+    return tab.kind === 'table' ? renameTable(tab.sourceTable, trimmed, tab) : renameView(tab, trimmed);
+}
+
+function renameTable(oldName, newRawLabel, tab) {
+    const newName = sanitizeTableName(newRawLabel);
+    if (newName === oldName) { tab.label = newRawLabel; return { ok: true }; }
+    if (loadedTables[newName]) {
+        return { ok: false, error: `A table named "${newName}" already exists — pick a different name.` };
+    }
+    if (tabs.some(t => t.kind === 'view' && t.viewName === newName)) {
+        return { ok: false, error: `"${newName}" conflicts with an existing view name.` };
+    }
+
+    const meta = loadedTables[oldName];
+    const data = (alasql.tables[oldName] && alasql.tables[oldName].data) || [];
+
+    // Drop any view that reads from this table (or its default tbl_<name> view) directly —
+    // its SQL text still names the old identifier, so it would otherwise silently break.
+    const oldIdentifiers = new Set([oldName, `tbl_${oldName}`]);
+    const brokenViews = tabs.filter(t => t.kind === 'view' && viewReferencesAny(t.sql, oldIdentifiers));
+    brokenViews.forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+    if (brokenViews.length) tabs = tabs.filter(t => !brokenViews.includes(t));
+
+    try {
+        alasql(`DROP VIEW IF EXISTS [tbl_${oldName}]`);
+        alasql(`DROP TABLE IF EXISTS [${oldName}]`);
+        setAlaSQLTableData(newName, data);
+    } catch (e) {
+        return { ok: false, error: 'Could not rename table: ' + e.message };
+    }
+    dataVersion++; // invalidate every tab's cached rows/columns
+
+    delete loadedTables[oldName];
+    loadedTables[newName] = { ...meta, rawName: newRawLabel };
+    const idx = tableOrder.indexOf(oldName);
+    if (idx !== -1) tableOrder[idx] = newName; else tableOrder.push(newName);
+
+    tab.key = `tbl_${newName}`;
+    tab.viewName = `tbl_${newName}`;
+    tab.sourceTable = newName;
+    tab.sql = `SELECT * FROM [${newName}]`;
+    tab.label = newRawLabel;
+    tab._rowsCache = null; tab._rowsCacheVersion = -1;
+    tab._colsCache = null; tab._colsCacheVersion = -1;
+    if (activeTabKey === `tbl_${oldName}`) activeTabKey = tab.key;
+
+    if (brokenViews.length) {
+        categoryErrors = [
+            ...categoryErrors,
+            ...brokenViews.map(t => `View "${t.label}" was removed because it referenced table "${oldName}" (renamed to "${newName}"). Update your category file to use the new name and reload it.`)
+        ];
+    }
+    return { ok: true };
+}
+
+function renameView(tab, newRawLabel) {
+    const newViewName = `vw_${slugify(newRawLabel)}`;
+    if (newViewName === tab.viewName) { tab.label = newRawLabel; return { ok: true }; }
+    if (tableOrder.includes(newViewName) || tableOrder.some(n => `tbl_${n}` === newViewName) || tabs.some(t => t.viewName === newViewName)) {
+        return { ok: false, error: `"${newViewName}" is already in use by another table or view.` };
+    }
+
+    const oldViewName = tab.viewName;
+    try {
+        alasql(`CREATE VIEW [${newViewName}] AS ${tab.sql}`);
+        alasql(`DROP VIEW IF EXISTS [${oldViewName}]`);
+    } catch (e) {
+        return { ok: false, error: 'Could not rename view: ' + e.message };
+    }
+
+    tab.key = newViewName;
+    tab.viewName = newViewName;
+    tab.label = newRawLabel;
+    tab._rowsCache = null; tab._rowsCacheVersion = -1;
+    tab._colsCache = null; tab._colsCacheVersion = -1;
+    if (activeTabKey === oldViewName) activeTabKey = newViewName;
+
+    // Drop any OTHER view that referenced this one by its old identifier — same reasoning as renameTable.
+    const brokenViews = tabs.filter(t => t.kind === 'view' && t !== tab && viewReferencesAny(t.sql, new Set([oldViewName])));
+    brokenViews.forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+    if (brokenViews.length) {
+        tabs = tabs.filter(t => !brokenViews.includes(t));
+        categoryErrors = [
+            ...categoryErrors,
+            ...brokenViews.map(t => `View "${t.label}" was removed because it referenced "${oldViewName}", which was renamed. Update your category file to use the new name and reload it.`)
+        ];
+    }
+    return { ok: true };
 }
 
 // Groups a flat list of {name, file} entries by column signature, merges +
@@ -883,7 +1005,7 @@ function renderTabBar() {
         const label = document.createElement('span');
         label.className = 'tab-label';
         label.textContent = tab.label;
-        label.title = 'Double-click to rename';
+        label.title = 'Double-click to rename (updates the actual table/view name — SQL can reference the new name afterwards)';
         label.addEventListener('dblclick', ev => {
             ev.stopPropagation();
             beginRenameTab(tab, btn, label);
@@ -896,7 +1018,7 @@ function renderTabBar() {
         const rename = document.createElement('span');
         rename.className = 'tab-rename-icon';
         rename.textContent = '✎';
-        rename.title = 'Rename tab';
+        rename.title = 'Rename (updates the actual table/view name — SQL can reference the new name afterwards)';
         rename.addEventListener('click', ev => {
             ev.stopPropagation();
             beginRenameTab(tab, btn, label);
@@ -937,9 +1059,19 @@ function beginRenameTab(tab, btn, labelEl) {
     function commit() {
         if (settled) return; settled = true;
         const v = input.value.trim();
-        tab.label = v || tab.label; // display label only — never touches the underlying SQL identifier
-        renderTabBar();
-        renderTableArea(); // section title + download filenames reflect the new label
+        if (!v || v === tab.label) { renderTabBar(); return; } // no change — just redraw to drop the input box
+
+        // A real rename: updates the underlying AlaSQL table/view identifier itself (not
+        // just the display label), so category SQL can reference the new name directly.
+        const result = performRename(tab, v);
+        if (!result.ok) {
+            alert(result.error);
+            settled = false;      // let them try again without re-opening the rename box
+            input.focus();
+            input.select();
+            return;
+        }
+        renderAll(); // pills, tab bar, any category-error banner, and the table area all need refreshing
     }
     function cancel() {
         if (settled) return; settled = true;
