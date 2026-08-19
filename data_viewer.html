@@ -49,13 +49,20 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body {
         background: var(--bg);
         color: var(--text);
         font-family: var(--sans);
         font-size: 13px;
-        min-height: 100vh;
         transition: background 0.2s, color 0.2s;
+        /* App-shell layout: topbar + tab bar are fixed-size flex children that never
+           scroll; #mainContent is the single scrolling region for everything else.
+           This is what keeps the tabs and table headers reliably visible while
+           scrolling, without needing to hand-coordinate sticky offsets in JS. */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
 
     /* ── Topbar ─────────────────────────────────────────────── */
@@ -67,8 +74,8 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
-        position: sticky;
-        top: 0;
+        flex-shrink: 0; /* fixed chrome — part of the flex column, never scrolls */
+        position: relative; /* anchors dropdown panels that open beneath it */
         z-index: 200;
         box-shadow: var(--shadow);
     }
@@ -96,6 +103,16 @@
     .card-header strong { color:var(--text-head); font-size:11px; letter-spacing:.07em; text-transform:uppercase; }
     .card-body { padding:10px 14px; }
 
+    /* ── Dropdown panels (Tables / Columns — opened from the topbar) ──── */
+    .dropdown-panel {
+        position:fixed; width:360px; max-width:calc(100vw - 24px); max-height:70vh;
+        overflow-y:auto; background:var(--surface); border:1px solid var(--border);
+        border-radius:8px; box-shadow:var(--shadow); z-index:300;
+    }
+    .dropdown-panel .card-header { position:sticky; top:0; }
+    .dropdown-panel .card-body { padding:12px 14px; }
+    .dropdown-hint { color:var(--text-dim); font-size:11px; line-height:1.6; margin-bottom:9px; }
+
     /* ── Column chips ────────────────────────────────────────── */
     #colManagerWrap { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
     .col-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:4px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .12s; user-select:none; }
@@ -109,9 +126,11 @@
     .table-pill.copied { background:var(--success); border-color:var(--success); color:#fff; }
     .table-pill .row-count { font-weight:400; opacity:.7; font-size:10px; }
 
-    /* ── Category tabs ───────────────────────────────────────── */
-    #tabBarWrap { margin-bottom: 4px; }
-    .tab-bar { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; border-bottom:1px solid var(--border); padding-top:4px; }
+    /* ── Category tabs (fixed chrome — sibling of #topbar, never scrolls) ── */
+    #tabBarWrap { flex-shrink:0; background:var(--bg); border-bottom:1px solid var(--border); padding:6px 16px 0; }
+    .tab-bar {
+        display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end;
+    }
     .tab-btn {
         display:inline-flex; align-items:center; gap:7px;
         padding:7px 14px; border-radius:7px 7px 0 0;
@@ -137,20 +156,23 @@
     .cat-error-banner { background:rgba(247,95,95,.08); border:1px solid var(--danger); border-radius:6px; padding:8px 12px; margin:10px 0; font-family:var(--mono); font-size:11px; color:var(--danger); }
     .cat-error-banner ul { margin:4px 0 0 18px; }
 
-    /* ── SQL preview strip ───────────────────────────────────── */
-    .sql-preview { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:6px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:5px; font-family:var(--mono); font-size:11px; color:var(--text-dim); overflow-x:auto; white-space:nowrap; }
+    /* ── SQL preview strip (editable) ────────────────────────── */
+    .sql-preview { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; padding:6px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:5px; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
     .sql-preview .sql-label { flex-shrink:0; padding:1px 6px; background:var(--accent); color:#fff; border-radius:3px; font-size:9px; font-weight:700; letter-spacing:.05em; }
-    .sql-preview code { color:var(--text); }
+    .sql-preview code.sql-text { color:var(--text); flex:1; min-width:0; overflow-x:auto; white-space:nowrap; }
+    .sql-preview .sql-edit-btn { flex-shrink:0; }
+    .sql-edit-input { flex:1; min-width:160px; font-family:var(--mono); font-size:11px; background:var(--surface); color:var(--text-head); border:1px solid var(--accent); border-radius:4px; padding:4px 7px; outline:none; }
+    .sql-edit-error { flex-basis:100%; color:var(--danger); font-size:10px; }
 
     /* ── Table area ──────────────────────────────────────────── */
-    #mainContent { padding:12px 16px; }
+    #mainContent { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:12px 16px; }
 
     .table-section-title { font-family:var(--mono); font-size:12px; color:var(--accent); padding:10px 0 6px; margin-bottom:6px; display:flex; align-items:baseline; gap:10px; }
     .table-section-title .count { font-size:10px; color:var(--text-dim); }
     .table-section-title .download-group { margin-left:auto; display:flex; gap:6px; }
 
-    .table-wrapper { width:100%; overflow:hidden; border:1px solid var(--border); border-radius:6px; margin-bottom:4px; }
-    table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+    .table-wrapper { width:100%; border:1px solid var(--border); border-radius:6px; margin-bottom:4px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; font-size:12px; }
     thead th { background:var(--th-bg); color:var(--text-head); padding:6px 8px; text-align:left; font-weight:500; font-size:11px; letter-spacing:.03em; white-space:nowrap; cursor:pointer; user-select:none; border-bottom:2px solid var(--border); border-right:1px solid var(--border); position:sticky; top:0; z-index:5; overflow:hidden; text-overflow:ellipsis; }
     .col-resize-handle { position:absolute; top:0; right:0; bottom:0; width:6px; cursor:col-resize; z-index:6; touch-action:none; }
     .col-resize-handle:hover, .col-resize-handle.resizing { background:var(--accent); opacity:.55; }
@@ -174,6 +196,18 @@
     .text-dim { color:var(--text-dim); }
     .text-sm  { font-size:11px; }
 
+    /* ── Modal (categories/SQL text entry) ──────────────────────── */
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:500; padding:20px; }
+    .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); width:100%; max-width:720px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--surface2); }
+    .modal-header strong { color:var(--text-head); font-size:13px; }
+    .modal-close { background:none; border:none; color:var(--text-dim); font-size:16px; line-height:1; cursor:pointer; padding:3px 7px; border-radius:4px; }
+    .modal-close:hover { color:var(--danger); background:var(--surface3); }
+    .modal-body { padding:14px 16px; overflow-y:auto; flex:1; }
+    .modal-footer { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--surface2); }
+    .cat-modal-textarea { width:100%; min-height:220px; resize:vertical; font-family:var(--mono); font-size:12px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:10px 12px; line-height:1.6; outline:none; }
+    .cat-modal-textarea:focus { border-color:var(--accent); }
+
     ::-webkit-scrollbar { width:5px; height:5px; }
     ::-webkit-scrollbar-track { background:var(--bg); }
     ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
@@ -193,58 +227,46 @@
     </label>
     <input type="file" id="folderFallbackInput" webkitdirectory directory multiple style="display:none">
     <span id="dataSummary"></span>
-    <label class="btn btn-outline btn-file" id="catFileBtn" style="display:none"
-           title="Text file: one view per line, e.g. High Priority - select * from orders where priority = 'High' order by due_date asc">
-           📄 Load Categories (SQL)<input type="file" id="catFileInput" accept=".txt,.sql,text/plain"></label>
+    <button class="btn btn-outline dropdown-trigger" id="tablesDropdownBtn" style="display:none" title="Loaded tables — click a table to copy its name + columns">🗂 Tables</button>
+    <button class="btn btn-outline dropdown-trigger" id="columnsDropdownBtn" style="display:none" title="Show/hide columns for the active tab">🧱 Columns</button>
+    <button class="btn btn-outline" id="catFileBtn" style="display:none"
+            title="Paste view definitions — one per line, e.g. High Priority - select * from orders where priority = 'High' order by due_date asc">
+        📄 Load Categories (SQL)
+    </button>
     <button class="btn btn-danger" id="clearCatBtn" style="display:none">✕ Clear Categories</button>
     <button class="btn btn-outline" id="hideVisitedBtn" style="display:none">🙈 Hide Visited</button>
     <button id="themeToggle" title="Toggle theme">🌙</button>
 </div>
 
+<!-- ── Tabs (fixed chrome, always visible while scrolling data below) ── -->
+<div id="tabBarWrap" style="display:none">
+    <div id="tabBar" class="tab-bar"></div>
+</div>
+
 <div id="mainContent">
-
-    <!-- ── Loaded tables (click a pill to copy its name + column list) ── -->
-    <div id="tablePillsCard" class="card" style="display:none">
-        <div class="card-header">
-            <strong>🗂 Loaded Tables</strong>
-            <span class="text-dim text-sm">Click a table to copy its name, then its columns (one per line) — handy for writing SQL below. Click the ✎ on a tab below to rename the table itself (SQL views can then reference the new name); any already-loaded view built on it will need reloading.</span>
-        </div>
-        <div class="card-body"><div id="tablePillsWrap"></div></div>
-    </div>
-
-    <!-- ── Controls ─────────────────────────────────────────────── -->
-    <div id="controls" style="display:none">
-        <div class="card">
-            <div class="card-header">
-                <strong>🧱 Columns</strong>
-                <button class="btn btn-outline btn-sm" id="showAllColsBtn">Show All</button>
-                <span class="text-dim text-sm">Click to hide/show — applies to the active tab only</span>
-            </div>
-            <div class="card-body"><div id="colManagerWrap"></div></div>
-        </div>
-    </div>
 
     <!-- ── Category parse errors/warnings ─────────────────────────── -->
     <div id="catErrorBanner" class="cat-error-banner" style="display:none"></div>
 
-    <!-- ── Tabs ─────────────────────────────────────────────────── -->
-    <div id="tabBarWrap" style="display:none">
-        <div id="tabBar" class="tab-bar"></div>
-        <div id="catHint" class="cat-hint">
-            <strong>No views loaded yet</strong> — showing the default <code>tbl_*</code> tab(s) for your loaded table(s).
-            Load a text file to add view tabs, one per line, in the form <code>View Name - SELECT ...</code>:
-            <pre>High Priority - select * from orders where priority = 'High' and status != 'Closed' order by due_date asc
+    <!-- ── "No views yet" hint ─────────────────────────────────────── -->
+    <div id="catHint" class="cat-hint" style="display:none">
+        <strong>No views loaded yet</strong> — showing the default <code>tbl_*</code> tab(s) for your loaded table(s).
+        Click <strong>"📄 Load Categories (SQL)"</strong> above and paste view definitions, one per line, in the
+        form <code>view name - SELECT ...</code>:
+        <pre>High Priority - select * from orders where priority = 'High' and status != 'Closed' order by due_date asc
 Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id
 Recent - select * from tbl_orders where created_at >= '2026-01-01'</pre>
-            Each line must be a full <code>SELECT</code> statement — real SQL, powered by a client-side SQL engine, so
-            <code>JOIN</code>, <code>GROUP BY</code>, aggregate functions and subqueries all work. Reference any loaded
-            table by the name shown in its pill above (case-sensitive), its default <code>tbl_&lt;name&gt;</code> view, or
-            any view defined earlier in the same file. Column names with spaces or special characters need brackets,
-            e.g. <code>[Job Title]</code>.
-            <br><strong>For safety, only plain <code>SELECT</code> queries are allowed</strong> — no
-            <code>INSERT / UPDATE / DELETE / DROP / CREATE</code>, no semicolon-separated statements, and no external
-            file/URL data sources. Anything else is rejected with an explanation below.
-        </div>
+        Each line must be a full <code>SELECT</code> statement — real SQL, powered by a client-side SQL engine, so
+        <code>JOIN</code>, <code>GROUP BY</code>, aggregate functions and subqueries all work. Reference any loaded
+        table by the name shown in the 🗂 Tables panel above (case-sensitive), its default <code>tbl_&lt;name&gt;</code>
+        view, or any view already loaded as a tab (including ones from an earlier "Load Categories" — loading is
+        additive, so it never removes views you've already loaded; pasting a line with the same name as an existing
+        view just updates that view in place). The view name can optionally be wrapped in quotes, e.g.
+        <code>"High Priority" - select ...</code>. Column names with spaces or special characters need brackets,
+        e.g. <code>[Job Title]</code>. Once loaded, click a view tab's SQL to edit and re-run it directly.
+        <br><strong>For safety, only plain <code>SELECT</code> queries are allowed</strong> — no
+        <code>INSERT / UPDATE / DELETE / DROP / CREATE</code>, no semicolon-separated statements, and no external
+        file/URL data sources. Anything else is rejected with an explanation below.
     </div>
 
     <!-- ── Table Area ────────────────────────────────────────────── -->
@@ -256,6 +278,60 @@ Recent - select * from tbl_orders where created_at >= '2026-01-01'</pre>
         </div>
     </div>
 
+</div>
+
+<!-- ── Dropdown: Loaded Tables (click a pill to copy its name + columns) ── -->
+<div id="tablesDropdown" class="dropdown-panel" style="display:none">
+    <div class="card-header"><strong>🗂 Loaded Tables</strong></div>
+    <div class="card-body">
+        <p class="dropdown-hint">Click a table to copy its name and columns for writing SQL. Click the ✎ on a tab
+            to rename a table (updates the actual identifier — SQL can reference the new name afterwards); any
+            already-loaded view built on it will need reloading.</p>
+        <div id="tablePillsWrap"></div>
+    </div>
+</div>
+
+<!-- ── Dropdown: Columns (show/hide columns for the active tab) ── -->
+<div id="columnsDropdown" class="dropdown-panel" style="display:none">
+    <div class="card-header">
+        <strong>🧱 Columns</strong>
+        <button class="btn btn-outline btn-sm" id="showAllColsBtn">Show All</button>
+    </div>
+    <div class="card-body">
+        <p class="dropdown-hint">Click to hide/show — applies to the active tab only.</p>
+        <div id="colManagerWrap"></div>
+    </div>
+</div>
+
+<!-- ── Categories (SQL views) modal ─────────────────────────── -->
+<div id="catModalBackdrop" class="modal-backdrop" style="display:none">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="catModalTitle">
+        <div class="modal-header">
+            <strong id="catModalTitle">📄 Load Categories (SQL views)</strong>
+            <button class="modal-close" id="catModalCloseBtn" title="Close">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="text-dim text-sm" style="margin-bottom:8px; line-height:1.6;">
+                One view per line, in the form <code>view name - SELECT ...</code> (the name can optionally be
+                quoted, e.g. <code>"High Priority" - select ...</code>). Real SQL — <code>JOIN</code>,
+                <code>GROUP BY</code>, aggregates and subqueries all work. Reference any loaded table by the name
+                shown in its pill, its default <code>tbl_&lt;name&gt;</code> view, or any view already loaded as a
+                tab (from this box or an earlier load — loading here never removes existing views; a name that
+                matches one already loaded just updates that view). Only plain <code>SELECT</code> statements are
+                allowed.
+            </p>
+            <textarea id="catModalTextarea" class="cat-modal-textarea" spellcheck="false"
+                placeholder='"High Priority" - select * from orders where priority = &#39;High&#39; and status != &#39;Closed&#39; order by due_date asc
+Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id'></textarea>
+            <label class="btn btn-outline btn-sm btn-file" style="margin-top:8px;" title="Populate the box above from a text file, so you can still review or edit it before loading">
+                📎 Load from a text file…<input type="file" id="catModalFileInput" accept=".txt,.sql,text/plain">
+            </label>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" id="catModalCancelBtn">Cancel</button>
+            <button class="btn btn-primary" id="catModalLoadBtn">Load Views</button>
+        </div>
+    </div>
 </div>
 
 <!--
@@ -313,6 +389,43 @@ function applyTheme() {
 }
 themeBtn.addEventListener('click', () => { isDark = !isDark; applyTheme(); });
 applyTheme();
+
+// ── Dropdown panels (Tables / Columns) ──────────────────────
+// Fixed-position popovers anchored under their trigger button. Kept simple and
+// robust: no scroll-position math needed since they're viewport-relative.
+function closeDropdown(panelId) {
+    const panel = document.getElementById(panelId);
+    if (panel) panel.style.display = 'none';
+}
+function closeAllDropdowns() {
+    document.querySelectorAll('.dropdown-panel').forEach(p => p.style.display = 'none');
+}
+function toggleDropdown(panelId, anchorBtn) {
+    const panel = document.getElementById(panelId);
+    const wasOpen = panel.style.display !== 'none';
+    closeAllDropdowns();
+    if (wasOpen) return;
+    const rect = anchorBtn.getBoundingClientRect();
+    panel.style.display = 'block';
+    const width = panel.offsetWidth || 360;
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) left = Math.max(12, window.innerWidth - width - 12);
+    panel.style.left = left + 'px';
+    panel.style.top = (rect.bottom + 6) + 'px';
+}
+document.getElementById('tablesDropdownBtn').addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    toggleDropdown('tablesDropdown', this);
+});
+document.getElementById('columnsDropdownBtn').addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    toggleDropdown('columnsDropdown', this);
+});
+document.addEventListener('click', e => {
+    if (e.target.closest('.dropdown-panel') || e.target.closest('.dropdown-trigger')) return;
+    closeAllDropdowns();
+});
+window.addEventListener('resize', closeAllDropdowns); // simplest way to avoid stale positioning
 
 // ═══════════════════════════════════════════════════════════
 //  DATE / TYPE / VALUE HELPERS  (unchanged sorting engine)
@@ -598,16 +711,28 @@ function columnSignature(data) {
 // Merge rows from files with an identical column signature. If the schema
 // includes an "id" field, later files (alphabetically) win on a given id —
 // this is the "remove duplicates based on id" behaviour. Otherwise every
-// row from every file is kept (straight concatenation).
-function dedupeById(rows) {
-    const map = new Map();
+// row from every file is kept (straight concatenation). Either way, every
+// output row is tagged with a "json_source" column: the file it came from,
+// or — for an id that appeared in more than one file — a comma-separated
+// list of every contributing file (e.g. "source_1,source_2"), even though
+// the row's actual field values come from the winning (last) file.
+function dedupeByIdWithSource(rows, rowSources) {
+    const winners = new Map();      // key -> row (last one wins, for the row's data)
+    const sourcesByKey = new Map(); // key -> ordered, de-duplicated list of contributing file names
     let noIdCounter = 0;
     rows.forEach(row => {
         const hasId = row && row.id !== undefined && row.id !== null && row.id !== '';
         const key = hasId ? `id:${row.id}` : `__noid_${noIdCounter++}`;
-        map.set(key, row);
+        winners.set(key, row);
+        const src = rowSources.get(row) || '';
+        if (!sourcesByKey.has(key)) sourcesByKey.set(key, []);
+        const list = sourcesByKey.get(key);
+        if (src && !list.includes(src)) list.push(src);
     });
-    return [...map.values()];
+    return [...winners.entries()].map(([key, row]) => ({ ...row, json_source: sourcesByKey.get(key).join(',') }));
+}
+function tagRowsWithSource(rows, rowSources) {
+    return rows.map(row => ({ ...row, json_source: rowSources.get(row) || '' }));
 }
 
 function mergedTableName(names) {
@@ -745,27 +870,33 @@ function renameView(tab, newRawLabel) {
 }
 
 // Groups a flat list of {name, file} entries by column signature, merges +
-// de-dupes each group, and loads one table per group.
+// de-dupes each group, and loads one table per group. Groups formed from
+// more than one file get a "json_source" column added (see dedupeByIdWithSource
+// / tagRowsWithSource above); a group that's really just a single file is left
+// untouched, since there's nothing to attribute a mix of sources to.
 async function handleLoadedFiles(entries) {
     if (!entries.length) { alert('No .json files found.'); return; }
     // Sort by filename so merges are deterministic regardless of OS folder-listing order.
     entries = [...entries].sort((a, b) => a.file.name.localeCompare(b.file.name));
 
     const results = await Promise.all(entries.map(en => readJsonFile(en.file, en.name)));
-    const groups = new Map(); // signature -> { names:[], rows:[], hasId }
+    const groups = new Map(); // signature -> { names:[], rows:[], rowSources:Map, hasId }
 
     results.forEach(r => {
         if (r.error) { alert(`"${r.name}": ${r.error}`); return; }
         if (!Array.isArray(r.json) || !r.json.length) { alert(`"${r.name}": JSON must be a non-empty array of records.`); return; }
         const sig = columnSignature(r.json);
-        if (!groups.has(sig)) groups.set(sig, { names: [], rows: [], hasId: sig.split('\u0001').includes('id') });
+        if (!groups.has(sig)) groups.set(sig, { names: [], rows: [], rowSources: new Map(), hasId: sig.split('\u0001').includes('id') });
         const g = groups.get(sig);
         g.names.push(r.name);
-        g.rows.push(...r.json);
+        r.json.forEach(row => { g.rows.push(row); g.rowSources.set(row, r.name); });
     });
 
     groups.forEach(g => {
-        const rows = g.hasId ? dedupeById(g.rows) : g.rows;
+        let rows = g.rows;
+        if (g.names.length > 1) {
+            rows = g.hasId ? dedupeByIdWithSource(g.rows, g.rowSources) : tagRowsWithSource(g.rows, g.rowSources);
+        }
         loadJsonTable(rows, mergedTableName(g.names), g.names);
     });
 
@@ -800,7 +931,10 @@ function setFolderLoadingState(loading) {
 function parseCategoryLine(line) {
     const sep = line.match(/^(.*?)\s+-\s+([\s\S]+)$/);
     if (!sep) throw new Error(`Could not find "<view name> - <SELECT statement>" in: ${line}`);
-    const name = sep[1].trim();
+    let name = sep[1].trim();
+    // Allow (and strip) a surrounding pair of quotes around the name, e.g. "High Priority" - select ...
+    const quoted = name.match(/^(["'])([\s\S]*)\1$/);
+    if (quoted) name = quoted[2].trim();
     let sql = sep[2].trim().replace(/;\s*$/, '');
     if (!name) throw new Error('Missing view name');
     if (!sql)  throw new Error('Missing SQL statement');
@@ -810,16 +944,17 @@ function parseCategoryLine(line) {
     return { name, sql };
 }
 function loadCategoriesFromText(text) {
-    if (!tableOrder.length) { alert('Load at least one data table first, then load a category file.'); return; }
+    if (!tableOrder.length) { alert('Load at least one data table first, then load your category SQL.'); return; }
 
-    // Drop the previous set of views before rebuilding.
-    tabs.filter(t => t.kind === 'view').forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
-    tabs = tabs.filter(t => t.kind === 'table');
-
+    // Additive: existing views (from earlier loads) are left alone — and are themselves
+    // valid things to build on (select ... from vw_something ...). A line whose name
+    // matches an already-loaded view is treated as an update to that view (its SQL is
+    // redefined in place) rather than creating a duplicate tab, so re-running "Load
+    // Categories" to tweak one view doesn't disturb any of the others.
     const lines = text.split(/\r?\n/);
-    const newTabs = [];
     const warnings = [];
-    const allowed = knownQueryTargets();
+    const allowed = knownQueryTargets(); // already includes every table AND every currently-loaded view
+    const touchedTabs = [];
 
     lines.forEach((rawLine, i) => {
         const line = rawLine.trim();
@@ -831,20 +966,34 @@ function loadCategoriesFromText(text) {
             const viewName = `vw_${slug}`;
             alasql(`DROP VIEW IF EXISTS [${viewName}]`);
             alasql(`CREATE VIEW [${viewName}] AS ${sql}`);
-            allowed.add(viewName); // later lines in this same file may build on this view
-            newTabs.push({
-                key: viewName, kind: 'view', label: viewName, viewName,
-                sourceTable: guessPrimaryTable(sql), raw: line, sql,
-                hiddenColumns: new Set(), sorts: [], colWidths: {},
-                _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1
-            });
+            allowed.add(viewName); // later lines in this same box, or future loads, may build on this view
+
+            const existing = tabs.find(t => t.kind === 'view' && t.viewName === viewName);
+            if (existing) {
+                existing.label = name;
+                existing.sql = sql;
+                existing.raw = line;
+                existing.sourceTable = guessPrimaryTable(sql);
+                existing._rowsCache = null; existing._rowsCacheVersion = -1;
+                existing._colsCache = null; existing._colsCacheVersion = -1;
+                touchedTabs.push(existing);
+            } else {
+                const tab = {
+                    key: viewName, kind: 'view', label: name, viewName,
+                    sourceTable: guessPrimaryTable(sql), raw: line, sql,
+                    hiddenColumns: new Set(), sorts: [], colWidths: {},
+                    _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1
+                };
+                tabs.push(tab);
+                touchedTabs.push(tab);
+            }
         } catch (e) {
             warnings.push(`✕ Line ${i + 1}: ${e.message}`);
         }
     });
 
-    tabs = [...tabs, ...newTabs];
-    activeTabKey = newTabs.length ? newTabs[0].key : (tabs[0] ? tabs[0].key : null);
+    dataVersion++; // any view that was just redefined may have dependents that need re-querying
+    if (touchedTabs.length) activeTabKey = touchedTabs[0].key;
     categoryErrors = warnings;
     renderAll();
 }
@@ -902,11 +1051,11 @@ function renderAll() {
 //  LOADED-TABLE PILLS  (click to copy "tablename\ncol1\ncol2...")
 // ═══════════════════════════════════════════════════════════
 function renderTablePills() {
-    const card = document.getElementById('tablePillsCard');
+    const btn = document.getElementById('tablesDropdownBtn');
     const wrap = document.getElementById('tablePillsWrap');
     wrap.innerHTML = '';
-    if (!tableOrder.length) { card.style.display = 'none'; return; }
-    card.style.display = '';
+    btn.style.display = tableOrder.length ? '' : 'none';
+    if (!tableOrder.length) { closeDropdown('tablesDropdown'); return; }
 
     tableOrder.forEach(name => {
         const meta = loadedTables[name];
@@ -914,7 +1063,7 @@ function renderTablePills() {
         pill.className = 'table-pill';
         pill.innerHTML = `${esc(name)} <span class="row-count">${meta.rowCount}</span>`;
         if (meta.sourceFiles && meta.sourceFiles.length > 1) {
-            pill.title = `Merged from ${meta.sourceFiles.length} files (matching columns, de-duped by id where present): ${meta.sourceFiles.join(', ')} — click to copy table name + columns`;
+            pill.title = `Merged from ${meta.sourceFiles.length} files (matching columns, de-duped by id where present): ${meta.sourceFiles.join(', ')}. Each row's "json_source" column shows which file(s) it came from. Click to copy table name + columns`;
         } else {
             pill.title = meta.rawName !== name
                 ? `Loaded from "${meta.rawName}" — click to copy table name + columns`
@@ -922,7 +1071,7 @@ function renderTablePills() {
         }
         pill.addEventListener('click', () => {
             const colLines = meta.allKeys.map(c => /^[A-Za-z_][A-Za-z0-9_]*$/.test(c) ? c : `[${c}]`);
-            const text = [name, ...colLines].join('\n');
+            const text = `table name - ${name}\n\ncolumns\n${colLines.join('\n')}`;
             copyText(text).then(() => {
                 pill.classList.add('copied');
                 const original = pill.innerHTML;
@@ -933,6 +1082,7 @@ function renderTablePills() {
         wrap.appendChild(pill);
     });
 }
+
 
 // ═══════════════════════════════════════════════════════════
 //  COLUMN MANAGER  (scoped to the active tab)
@@ -992,7 +1142,7 @@ function renderTabBar() {
     const wrap = document.getElementById('tabBarWrap');
     const bar  = document.getElementById('tabBar');
     const hint = document.getElementById('catHint');
-    if (!tabs.length) { wrap.style.display = 'none'; return; }
+    if (!tabs.length) { wrap.style.display = 'none'; hint.style.display = 'none'; return; }
     wrap.style.display = '';
     bar.innerHTML = '';
     hint.style.display = tabs.some(t => t.kind === 'view') ? 'none' : '';
@@ -1293,7 +1443,8 @@ function renderTableArea() {
 
     if (!tabs.length) {
         area.innerHTML = `<div class="empty-state"><div class="icon">◈</div><h3>No data loaded</h3><p class="text-dim">Click "Load Folder" to open every JSON file in a folder (or "Add Files" to pick individual files)</p></div>`;
-        document.getElementById('controls').style.display = 'none';
+        document.getElementById('columnsDropdownBtn').style.display = 'none';
+        closeDropdown('columnsDropdown');
         return;
     }
 
@@ -1304,11 +1455,12 @@ function renderTableArea() {
     try {
         rows = getTabRows(tab);
     } catch (e) {
-        document.getElementById('controls').style.display = 'none';
+        document.getElementById('columnsDropdownBtn').style.display = 'none';
+        closeDropdown('columnsDropdown');
         area.innerHTML = `<div class="cat-error-banner"><strong>Error running "${esc(tab.label)}":</strong> ${esc(firstLine(e.message))}</div>`;
         return;
     }
-    document.getElementById('controls').style.display = '';
+    document.getElementById('columnsDropdownBtn').style.display = '';
 
     const { urlColumn, allCols, cols, types } = getTabColumnInfo(tab, rows);
     renderColManager(tab, cols);
@@ -1347,11 +1499,83 @@ function renderTableArea() {
     if (tab.kind === 'view') {
         const info = document.createElement('div');
         info.className = 'sql-preview';
-        info.innerHTML = `<span class="sql-label">SQL</span><code>${esc(tab.sql)}</code>`;
+        renderSqlPreview(info, tab);
         area.appendChild(info);
     }
 
     area.appendChild(buildTable(visCols, visibleEntries, tab, urlColumn));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EDITABLE SQL  (for view tabs) — edit the query in place and re-run it
+//  immediately; the underlying AlaSQL view is redefined so any other view
+//  built on top of it also picks up the change.
+// ═══════════════════════════════════════════════════════════
+function renderSqlPreview(container, tab) {
+    container.classList.remove('sql-preview-editing');
+    container.innerHTML = `
+        <span class="sql-label">SQL</span>
+        <code class="sql-text">${esc(tab.sql)}</code>
+        <button class="btn btn-outline btn-sm sql-edit-btn" title="Edit this view's SQL and re-run it">✎ Edit SQL</button>
+    `;
+    container.querySelector('.sql-edit-btn').addEventListener('click', () => beginEditSql(container, tab));
+}
+
+function beginEditSql(container, tab) {
+    container.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'sql-label';
+    label.textContent = 'SQL';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'sql-edit-input';
+    input.value = tab.sql;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary btn-sm';
+    saveBtn.textContent = '💾 Save & Run';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-outline btn-sm';
+    cancelBtn.textContent = '✕ Cancel';
+
+    const errorEl = document.createElement('div');
+    errorEl.className = 'sql-edit-error';
+
+    function doSave() {
+        const newSql = input.value.trim().replace(/;\s*$/, '');
+        if (!newSql) { errorEl.textContent = 'SQL cannot be empty.'; return; }
+        if (newSql === tab.sql) { renderTableArea(); return; }
+        try {
+            const allowed = knownQueryTargets();
+            assertSafeSelect(newSql, allowed);
+            alasql(`DROP VIEW IF EXISTS [${tab.viewName}]`);
+            alasql(`CREATE VIEW [${tab.viewName}] AS ${newSql}`);
+            tab.sql = newSql;
+            tab.sourceTable = guessPrimaryTable(newSql);
+            dataVersion++; // this view (and anything built on it) needs re-querying
+            renderTableArea();
+        } catch (e) {
+            errorEl.textContent = firstLine(e.message);
+        }
+    }
+    function doCancel() { renderTableArea(); }
+
+    input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter')  { ev.preventDefault(); doSave(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); doCancel(); }
+    });
+    saveBtn.addEventListener('click', doSave);
+    cancelBtn.addEventListener('click', doCancel);
+
+    container.appendChild(label);
+    container.appendChild(input);
+    container.appendChild(saveBtn);
+    container.appendChild(cancelBtn);
+    container.appendChild(errorEl);
+    input.focus();
+    input.select();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1402,12 +1626,44 @@ document.getElementById('dataFileInput').addEventListener('change', async e => {
     await handleLoadedFiles(files.map(f => ({ name: f.name.replace(/\.[^.]+$/, ''), file: f })));
 });
 
-document.getElementById('catFileInput').addEventListener('change', e => {
+// ── Categories (SQL views) modal ────────────────────────────
+function openCategoriesModal() {
+    closeAllDropdowns();
+    const textarea = document.getElementById('catModalTextarea');
+    textarea.value = ''; // always starts blank — loading is additive, so there's nothing to "re-show" here
+    document.getElementById('catModalBackdrop').style.display = 'flex';
+    textarea.focus();
+}
+function closeCategoriesModal() {
+    document.getElementById('catModalBackdrop').style.display = 'none';
+}
+document.getElementById('catFileBtn').addEventListener('click', openCategoriesModal);
+document.getElementById('catModalCancelBtn').addEventListener('click', closeCategoriesModal);
+document.getElementById('catModalCloseBtn').addEventListener('click', closeCategoriesModal);
+document.getElementById('catModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'catModalBackdrop') closeCategoriesModal();
+});
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('catModalBackdrop').style.display !== 'none') { closeCategoriesModal(); return; }
+    closeAllDropdowns();
+});
+document.getElementById('catModalLoadBtn').addEventListener('click', () => {
+    const textarea = document.getElementById('catModalTextarea');
+    const text = textarea.value;
+    if (!text.trim()) { closeCategoriesModal(); return; }
+    loadCategoriesFromText(text);
+    textarea.value = ''; // clear it out now that it's been loaded into views
+    closeCategoriesModal();
+});
+// Convenience only: populates the textarea from a file so it can still be reviewed/edited before loading.
+document.getElementById('catModalFileInput').addEventListener('change', e => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => { loadCategoriesFromText(ev.target.result); };
+    reader.onload = ev => { document.getElementById('catModalTextarea').value = ev.target.result; };
     reader.onerror = () => alert('Could not read file.');
-    reader.readAsText(file); e.target.value = '';
+    reader.readAsText(file);
+    e.target.value = '';
 });
 
 document.getElementById('clearCatBtn').addEventListener('click', clearCategories);
