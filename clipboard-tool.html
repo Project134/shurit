@@ -157,25 +157,32 @@
   }
   .field-desc:hover, .field-desc:focus{ background: rgba(255,255,255,.5); }
 
-  /* ---------- Tabs (folder dividers) ---------- */
-  .tabs-row{ display:flex; align-items:flex-end; gap:4px; margin: 18px 0 0; overflow-x:auto; padding-bottom:0; }
+  /* ---------- Tabs (wrap onto multiple lines instead of scrolling) ---------- */
+  .tabs-row{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin: 18px 0 12px; }
   .tab{
-    position:relative; padding: 8px 16px; font-size:13px; font-weight:600; color: var(--ink-soft);
-    background: #e4dcc6; border: 1px solid var(--border); border-bottom:none;
-    border-radius: 8px 8px 0 0; cursor:grab; white-space:nowrap; display:flex; align-items:center; gap:8px;
-    top: 1px;
+    position:relative; padding: 7px 8px 7px 14px; font-size:13px; font-weight:600; color: var(--ink-soft);
+    background: #e4dcc6; border: 1px solid var(--border); border-radius: 8px;
+    cursor:grab; white-space:nowrap; display:flex; align-items:center; gap:6px;
   }
-  .tab.active{ background: var(--card); color: var(--ink); z-index:2; }
-  .tab.drag-over{ box-shadow: -2px 0 0 var(--accent) inset; }
+  .tab.active{ background: var(--card); color: var(--ink); border-color: var(--accent); }
+  .tab.drag-over{ box-shadow: 0 0 0 2px var(--accent) inset; }
   .tab input.tab-rename{
     border:none; background:transparent; font: inherit; color:inherit; width: 110px; padding:0;
   }
-  .tab .tab-close{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); }
+  .tab .tab-close{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); flex: 0 0 auto; }
   .tab .tab-close:hover{ background: var(--danger-soft); color: var(--danger); }
   .tab .tab-rename-btn{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); flex: 0 0 auto; }
   .tab .tab-rename-btn:hover{ background: var(--accent-soft); color: var(--accent-dark); }
+  .tab .tab-copy-btn{
+    width:18px; height:18px; border-radius:4px; display:flex; align-items:center; justify-content:center;
+    color: var(--ink-faint); flex: 0 0 auto; border:none; background:transparent; opacity:.55;
+  }
+  .tab .tab-copy-btn.ready{ color:#1a8a4a; opacity:1; }
+  .tab .tab-copy-btn.ready:hover{ background:#d9f2e3; color:#116636; }
+  .tab .tab-copy-btn:not(.ready){ cursor:not-allowed; }
+  .tab .tab-copy-btn.copied{ color:#1a8a4a; background:#d9f2e3; opacity:1; }
   .tab-add{
-    padding: 8px 12px; border-radius: 8px 8px 0 0; border:1px dashed var(--border); background:transparent;
+    padding: 7px 12px; border-radius: 8px; border:1px dashed var(--border); background:transparent;
     color: var(--ink-soft); font-size:13px; font-weight:600; display:flex; align-items:center; gap:5px;
   }
   .tab-add:hover{ background: var(--accent-soft); color: var(--accent-dark); border-style:solid; }
@@ -186,8 +193,8 @@
 
   /* ---------- Index card (content) ---------- */
   .index-card{
-    background: var(--card); border: 1px solid var(--card-line); border-radius: 0 10px 10px 10px;
-    box-shadow: var(--shadow-lg); position:relative; margin-top:-1px;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
+    box-shadow: var(--shadow-lg); position:relative;
   }
   .index-card-head{
     display:flex; align-items:center; justify-content:space-between; padding: 10px 14px;
@@ -466,6 +473,69 @@
     const names = extractParamNames(display);
     pageParseCache = { groupId: group.id, pageKey, raw, links, display, names };
     return pageParseCache;
+  }
+
+  // Whether a given page (any page, not just the one currently open) could be copied right
+  // now with no missing parameters. Reuses the shared parse cache for the current page (the
+  // common case — checked right after a parameter is filled in) and parses fresh, on demand,
+  // for any other page — which only happens when the tabs themselves are being (re)built,
+  // not on every keystroke.
+  function computePageCopyReady(group, pageKey){
+    const raw = (group.pages[pageKey] || '').trim();
+    if (!raw) return false;
+    let display, names;
+    if (pageKey === state.currentPageKey){
+      ({ display, names } = getPageParse(group, pageKey));
+    } else {
+      const stripped = extractLinksAndStrip(group.pages[pageKey] || '');
+      display = stripped.display;
+      names = extractParamNames(display);
+    }
+    if (display.length === 0) return false;
+    const values = getParamValues(group.id, pageKey);
+    return allParamsFilled(names, values);
+  }
+
+  function applyTabCopyReadiness(btn, group, pageKey){
+    const ready = computePageCopyReady(group, pageKey);
+    btn.classList.toggle('ready', ready);
+    btn.title = ready ? 'Quick copy this page' : 'Fill in required parameters first';
+    return ready;
+  }
+
+  // Keeps a tab's mini copy icon in sync when a parameter value changes, without re-rendering
+  // the whole tab row — mirrors how the main Copy button's enabled state is refreshed.
+  function updateTabCopyReadiness(group, pageKey){
+    const tab = document.querySelector('.tab[data-key="' + CSS.escape(pageKey) + '"]');
+    const btn = tab && tab.querySelector('.tab-copy-btn');
+    if (btn) applyTabCopyReadiness(btn, group, pageKey);
+  }
+
+  // Shared by the tab's quick-copy icon and could be reused anywhere else a "copy this page"
+  // action is needed — reads whatever is currently stored for that page, independent of
+  // which page is actively open in the editor.
+  async function copyPageText(group, pageKey, iconBtn){
+    const raw = group.pages[pageKey] || '';
+    const display = (pageKey === state.currentPageKey)
+      ? getPageParse(group, pageKey).display
+      : extractLinksAndStrip(raw).display;
+    const values = getParamValues(group.id, pageKey);
+    const final = getFinalText(display, values);
+    const ok = await copyText(final);
+    if (ok){
+      showToast('Copied "' + pageKey + '" to clipboard', 'success');
+      if (iconBtn){
+        const original = iconBtn.innerHTML;
+        iconBtn.innerHTML = ICONS.check;
+        iconBtn.classList.add('copied');
+        setTimeout(() => {
+          iconBtn.innerHTML = original;
+          iconBtn.classList.remove('copied');
+        }, 1200);
+      }
+    } else {
+      showToast('Copy failed — clipboard access blocked by the browser', 'error');
+    }
   }
 
   // Grows a textarea to fit its content, capped so a very long paste can't turn it (and the
@@ -1118,6 +1188,21 @@
       label.className = 'tab-label';
       label.textContent = key;
 
+      const copyIconBtn = document.createElement('button');
+      copyIconBtn.type = 'button';
+      copyIconBtn.className = 'tab-copy-btn';
+      copyIconBtn.innerHTML = ICONS.copy;
+      applyTabCopyReadiness(copyIconBtn, group, key);
+      copyIconBtn.addEventListener('click', async (e) => {
+        // Quick-copy this page directly from the tab, without switching to it first.
+        e.stopPropagation();
+        if (!copyIconBtn.classList.contains('ready')){
+          showToast('"' + key + '" needs its parameters filled in first', 'warn');
+          return;
+        }
+        await copyPageText(group, key, copyIconBtn);
+      });
+
       const renameBtn = document.createElement('span');
       renameBtn.className = 'tab-rename-btn';
       renameBtn.innerHTML = ICONS.pencil;
@@ -1141,7 +1226,7 @@
         deletePage(group, key);
       });
 
-      tab.append(label, renameBtn, closeBtn);
+      tab.append(label, copyIconBtn, renameBtn, closeBtn);
       tab.addEventListener('click', () => {
         state.currentPageKey = key;
         state.mode = 'preview';
@@ -1353,6 +1438,7 @@
         renderParamsDebounce = setTimeout(() => {
           renderParams();
           updateCopyButtonState();
+          updateTabCopyReadiness(group, state.currentPageKey);
         }, 150);
       });
       body.appendChild(ta);
@@ -1486,6 +1572,7 @@
     input.value = value;
     setParamValue(group.id, pageKey, name, value); // already persists to localStorage in the background
     updateCopyButtonState();
+    updateTabCopyReadiness(group, pageKey);
     if (state.mode === 'preview' && pageKey === state.currentPageKey){
       const preview = document.getElementById('contentPreview');
       if (preview) updateParamTokensInPreview(preview, group, pageKey, name, value);
