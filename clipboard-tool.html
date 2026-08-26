@@ -160,23 +160,19 @@
   /* ---------- Tabs (wrap onto multiple lines instead of scrolling) ---------- */
   .tabs-row{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin: 18px 0 12px; }
   .tab{
-    position:relative; padding: 7px 8px 7px 14px; font-size:13px; font-weight:600; color: var(--ink-soft);
+    position:relative; padding: 6px 8px 6px 14px; font-size:13px; font-weight:600; color: var(--ink-soft);
     background: #e4dcc6; border: 1px solid var(--border); border-radius: 8px;
     cursor:grab; white-space:nowrap; display:flex; align-items:center; gap:6px;
   }
   .tab.active{ background: var(--card); color: var(--ink); border-color: var(--accent); }
   .tab.drag-over{ box-shadow: 0 0 0 2px var(--accent) inset; }
-  .tab input.tab-rename{
-    border:none; background:transparent; font: inherit; color:inherit; width: 110px; padding:0;
-  }
   .tab .tab-close{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); flex: 0 0 auto; }
   .tab .tab-close:hover{ background: var(--danger-soft); color: var(--danger); }
-  .tab .tab-rename-btn{ width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; color: var(--ink-faint); flex: 0 0 auto; }
-  .tab .tab-rename-btn:hover{ background: var(--accent-soft); color: var(--accent-dark); }
   .tab .tab-copy-btn{
-    width:18px; height:18px; border-radius:4px; display:flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:5px; display:flex; align-items:center; justify-content:center;
     color: var(--ink-faint); flex: 0 0 auto; border:none; background:transparent; opacity:.55;
   }
+  .tab .tab-copy-btn svg{ width:16px; height:16px; }
   .tab .tab-copy-btn.ready{ color:#1a8a4a; opacity:1; }
   .tab .tab-copy-btn.ready:hover{ background:#d9f2e3; color:#116636; }
   .tab .tab-copy-btn:not(.ready){ cursor:not-allowed; }
@@ -233,6 +229,16 @@
   .param-token-toggle:hover{ opacity:1; }
 
   /* ---------- Params pane ---------- */
+  .page-name-section{ padding: 0 16px 14px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .page-name-label{
+    display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+    color: var(--ink-faint); margin-bottom:5px;
+  }
+  .page-name-input{
+    width:100%; border:1px solid var(--border); background: var(--card); border-radius:7px;
+    padding:7px 10px; font-size:13px; font-weight:700; color: var(--ink); font-family: var(--font-body);
+  }
+  .page-name-input:focus{ border-color: var(--accent); }
   .params-body{ flex:1; overflow-y:auto; padding: 4px 16px 20px; display:flex; flex-direction:column; gap:14px; contain: content; }
   .param-field{ display:flex; flex-direction:column; gap:5px; }
   .param-field-head{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
@@ -1203,18 +1209,6 @@
         await copyPageText(group, key, copyIconBtn);
       });
 
-      const renameBtn = document.createElement('span');
-      renameBtn.className = 'tab-rename-btn';
-      renameBtn.innerHTML = ICONS.pencil;
-      renameBtn.title = 'Rename page';
-      renameBtn.addEventListener('click', (e) => {
-        // Stop this from also bubbling into the tab's own click handler below —
-        // that handler re-renders the tab row, which would rip out the rename
-        // input the instant it appeared.
-        e.stopPropagation();
-        startRenamePage(tab, group, key);
-      });
-
       const closeBtn = document.createElement('span');
       closeBtn.className = 'tab-close';
       closeBtn.innerHTML = ICONS.close;
@@ -1226,7 +1220,7 @@
         deletePage(group, key);
       });
 
-      tab.append(label, copyIconBtn, renameBtn, closeBtn);
+      tab.append(label, copyIconBtn, closeBtn);
       tab.addEventListener('click', () => {
         state.currentPageKey = key;
         state.mode = 'preview';
@@ -1274,36 +1268,20 @@
     main.appendChild(wrap);
   }
 
-  function startRenamePage(tabEl, group, oldKey){
-    tabEl.innerHTML = '';
-    tabEl.draggable = false; // avoid fighting with text selection while the input is open
-    const input = document.createElement('input');
-    input.className = 'tab-rename';
-    input.value = oldKey;
-    // Clicking inside the input to move the cursor would otherwise bubble up to the
-    // tab's own click handler and re-render the tab row out from under it.
-    input.addEventListener('mousedown', (e) => e.stopPropagation());
-    input.addEventListener('click', (e) => e.stopPropagation());
-    tabEl.appendChild(input);
-    input.focus();
-    input.select();
-    function commit(){
-      let newKey = input.value.trim();
-      if (!newKey) newKey = oldKey;
-      if (newKey !== oldKey){
-        if (Object.prototype.hasOwnProperty.call(group.pages, newKey)){
-          newKey = uniquePageKey(group.pages, newKey);
-        }
-        renamePageKey(group, oldKey, newKey);
+  // Renaming now lives in the parameters pane (one field, always for whichever page is
+  // currently open) instead of an icon on every tab. Shared here so that field's blur
+  // handler and anything else that needs it stay in sync with the same rules: trim, fall
+  // back to the old name if left blank, and de-duplicate against sibling page names.
+  function commitPageRename(group, oldKey, rawNewValue){
+    let newKey = (rawNewValue || '').trim();
+    if (!newKey) newKey = oldKey;
+    if (newKey !== oldKey){
+      if (Object.prototype.hasOwnProperty.call(group.pages, newKey)){
+        newKey = uniquePageKey(group.pages, newKey);
       }
-      renderMain();
-      renderParams();
+      renamePageKey(group, oldKey, newKey);
     }
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') input.blur();
-      if (e.key === 'Escape'){ input.value = oldKey; input.blur(); }
-    });
-    input.addEventListener('blur', commit);
+    return newKey;
   }
 
   function renamePageKey(group, oldKey, newKey){
@@ -1607,11 +1585,40 @@
     header.appendChild(h3);
     pane.appendChild(header);
 
+    const group = getCurrentGroup();
+
+    if (group && state.currentPageKey){
+      const nameSection = document.createElement('div');
+      nameSection.className = 'page-name-section';
+      const nameLabel = document.createElement('label');
+      nameLabel.className = 'page-name-label';
+      nameLabel.textContent = 'Page name';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'page-name-input';
+      nameInput.value = state.currentPageKey;
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') nameInput.blur();
+        if (e.key === 'Escape'){ nameInput.value = state.currentPageKey; nameInput.blur(); }
+      });
+      nameInput.addEventListener('blur', () => {
+        const oldKey = state.currentPageKey;
+        const finalKey = commitPageRename(group, oldKey, nameInput.value);
+        if (finalKey !== oldKey){
+          renderMain();  // tabs need to show the new name
+          renderParams(); // rebuilds this pane too, with the (possibly de-duplicated) final name
+        } else {
+          nameInput.value = finalKey; // e.g. a whitespace-only edit — restore the exact original
+        }
+      });
+      nameSection.append(nameLabel, nameInput);
+      pane.appendChild(nameSection);
+    }
+
     const body = document.createElement('div');
     body.className = 'params-body';
     pane.appendChild(body);
 
-    const group = getCurrentGroup();
     if (!group || !state.currentPageKey){
       const p = document.createElement('p');
       p.className = 'muted';
