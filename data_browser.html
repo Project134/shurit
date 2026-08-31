@@ -263,16 +263,16 @@
 
 <!-- ── "No views yet" hint (fixed chrome, conditional) ─────────────── -->
 <div id="catHint" class="cat-hint">
-    <strong>No views loaded yet</strong> — showing the default <code>tbl_*</code> tab(s) for your loaded table(s).
+    <strong>No views loaded yet</strong> — showing a tab for each of your loaded table(s), named after the table itself.
     Click <strong>"📄 Load Categories (SQL)"</strong> above and paste view definitions, one per line, in the
     form <code>view name - SELECT ...</code>:
     <pre>High Priority - select * from orders where priority = 'High' and status != 'Closed' order by due_date asc
 Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id
-Recent - select * from tbl_orders where created_at >= '2026-01-01'</pre>
+Recent - select * from orders where created_at >= '2026-01-01'</pre>
     Each line must be a full <code>SELECT</code> statement — real SQL, powered by a client-side SQL engine, so
     <code>JOIN</code>, <code>GROUP BY</code>, aggregate functions and subqueries all work. Reference any loaded
-    table by the name shown in the 🗂 Tables panel above (case-sensitive), its default <code>tbl_&lt;name&gt;</code>
-    view, or any view already loaded as a tab (including ones from an earlier "Load Categories" — loading is
+    table by the exact name shown in the 🗂 Tables panel above and on its tab (case-sensitive — no prefix), or
+    any view already loaded as a tab (including ones from an earlier "Load Categories" — loading is
     additive, so it never removes views you've already loaded; pasting a line with the same name as an existing
     view just updates that view in place). The view name can optionally be wrapped in quotes, e.g.
     <code>"High Priority" - select ...</code>. Column names with spaces or special characters need brackets,
@@ -325,11 +325,13 @@ Recent - select * from tbl_orders where created_at >= '2026-01-01'</pre>
             <p class="text-dim text-sm" style="margin-bottom:8px; line-height:1.6;">
                 One view per line, in the form <code>view name - SELECT ...</code> (the name can optionally be
                 quoted, e.g. <code>"High Priority" - select ...</code>). Real SQL — <code>JOIN</code>,
-                <code>GROUP BY</code>, aggregates and subqueries all work. Reference any loaded table by the name
-                shown in its pill, its default <code>tbl_&lt;name&gt;</code> view, or any view already loaded as a
-                tab (from this box or an earlier load — loading here never removes existing views; a name that
-                matches one already loaded just updates that view). Only plain <code>SELECT</code> statements are
-                allowed.
+                <code>GROUP BY</code>, aggregates and subqueries all work. Reference any loaded table by the exact
+                name shown in its pill (case-sensitive — no prefix), or any view already loaded as a tab (from
+                this box or an earlier load — loading here never removes existing views; a name that matches one
+                already loaded just updates that view). Only plain <code>SELECT</code> statements are allowed.
+                Note: a view's own name is lowercased and has spaces/symbols turned into underscores for use in
+                SQL (e.g. "High Priority" → <code>high_priority</code>) — hover a view's tab to see its exact
+                identifier.
             </p>
             <textarea id="catModalTextarea" class="cat-modal-textarea" spellcheck="false"
                 placeholder='"High Priority" - select * from orders where priority = &#39;High&#39; and status != &#39;Closed&#39; order by due_date asc
@@ -375,8 +377,10 @@ let loadedTables   = {};
 let tableOrder     = [];   // insertion order of sanitized table names
 let dataVersion    = 0;    // bumped whenever any table/view's underlying data changes — invalidates per-tab caches
 
-// tabs: one 'table' tab per loaded table (tbl_<name>, uncloseable) + one 'view' tab per
-// loaded SQL view (vw_<slug>, closeable). Each tab: { key, kind:'table'|'view', label,
+// tabs: one 'table' tab per loaded table (key/viewName = the table's own sanitized name,
+// uncloseable) + one 'view' tab per loaded SQL view (key/viewName = the slugified view
+// name, closeable) — neither carries any naming prefix, so SQL can reference either one
+// by exactly the name shown on its tab. Each tab: { key, kind:'table'|'view', label,
 // viewName, sourceTable, raw, sql, hiddenColumns:Set, sorts:[], colWidths:{},
 // _rowsCache, _rowsCacheVersion, _colsCache, _colsCacheVersion }
 let tabs           = [];
@@ -594,7 +598,7 @@ function slugify(raw) {
 // ═══════════════════════════════════════════════════════════
 function knownQueryTargets() {
     const s = new Set();
-    tableOrder.forEach(n => { s.add(n); s.add(`tbl_${n}`); });
+    tableOrder.forEach(n => s.add(n));
     tabs.filter(t=>t.kind==='view').forEach(t => s.add(t.viewName));
     return s;
 }
@@ -636,7 +640,7 @@ function guessPrimaryTable(sql) {
         for (let i=0;i<20;i++) {
             if (!node.from || !node.from[0]) return null;
             const f = node.from[0];
-            if (f.tableid) return f.tableid.replace(/^tbl_/, '');
+            if (f.tableid) return f.tableid;
             if (f.from) { node = f; continue; }
             return null;
         }
@@ -673,8 +677,6 @@ function ensureAlaSQLTable(name) {
 function setAlaSQLTableData(name, data) {
     ensureAlaSQLTable(name);
     alasql.tables[name].data = data;
-    alasql(`DROP VIEW IF EXISTS [tbl_${name}]`);
-    alasql(`CREATE VIEW [tbl_${name}] AS SELECT * FROM [${name}]`);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -735,6 +737,10 @@ function loadJsonTable(json, rawName, sourceFiles) {
         return;
     }
     const name = sanitizeTableName(rawName);
+    if (!loadedTables[name] && tabs.some(t => t.kind === 'view' && t.viewName === name)) {
+        alert(`"${rawName}": a view named "${name}" is already loaded — rename or remove that view first, or rename this file.`);
+        return;
+    }
     setAlaSQLTableData(name, json);
     dataVersion++;
 
@@ -743,18 +749,17 @@ function loadJsonTable(json, rawName, sourceFiles) {
     loadedTables[name] = { rawName, allKeys, rowCount: json.length, urlColumn, sourceFiles: sourceFiles || [rawName] };
     if (!tableOrder.includes(name)) tableOrder.push(name);
 
-    const tabKey = `tbl_${name}`;
-    let tab = tabs.find(t => t.key === tabKey);
+    let tab = tabs.find(t => t.key === name);
     if (!tab) {
         tab = {
-            key: tabKey, kind: 'table', label: tabKey, viewName: tabKey,
+            key: name, kind: 'table', label: name, viewName: name,
             sourceTable: name, raw: null, sql: `SELECT * FROM [${name}]`,
             hiddenColumns: new Set(), sorts: [], colWidths: {},
             _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1
         };
         tabs.push(tab);
     }
-    if (!activeTabKey) activeTabKey = tabKey;
+    if (!activeTabKey) activeTabKey = name;
 }
 
 async function handleLoadedFiles(entries) {
@@ -820,13 +825,12 @@ function renameTable(oldName, newRawLabel, tab) {
 
     const meta = loadedTables[oldName];
     const data = (alasql.tables[oldName] && alasql.tables[oldName].data) || [];
-    const oldIdentifiers = new Set([oldName, `tbl_${oldName}`]);
+    const oldIdentifiers = new Set([oldName]);
     const brokenViews = tabs.filter(t => t.kind === 'view' && viewReferencesAny(t.sql, oldIdentifiers));
     brokenViews.forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
     if (brokenViews.length) tabs = tabs.filter(t => !brokenViews.includes(t));
 
     try {
-        alasql(`DROP VIEW IF EXISTS [tbl_${oldName}]`);
         alasql(`DROP TABLE IF EXISTS [${oldName}]`);
         setAlaSQLTableData(newName, data);
     } catch (e) {
@@ -839,14 +843,14 @@ function renameTable(oldName, newRawLabel, tab) {
     const idx = tableOrder.indexOf(oldName);
     if (idx !== -1) tableOrder[idx] = newName; else tableOrder.push(newName);
 
-    tab.key = `tbl_${newName}`;
-    tab.viewName = `tbl_${newName}`;
+    tab.key = newName;
+    tab.viewName = newName;
     tab.sourceTable = newName;
     tab.sql = `SELECT * FROM [${newName}]`;
     tab.label = newRawLabel;
     tab._rowsCache = null; tab._rowsCacheVersion = -1;
     tab._colsCache = null; tab._colsCacheVersion = -1;
-    if (activeTabKey === `tbl_${oldName}`) activeTabKey = tab.key;
+    if (activeTabKey === oldName) activeTabKey = tab.key;
 
     if (brokenViews.length) {
         categoryErrors = [...categoryErrors, ...brokenViews.map(t => `View "${t.label}" was removed because it referenced table "${oldName}" (renamed to "${newName}"). Update your category SQL to use the new name and reload it.`)];
@@ -854,9 +858,9 @@ function renameTable(oldName, newRawLabel, tab) {
     return { ok: true };
 }
 function renameView(tab, newRawLabel) {
-    const newViewName = `vw_${slugify(newRawLabel)}`;
+    const newViewName = slugify(newRawLabel);
     if (newViewName === tab.viewName) { tab.label = newRawLabel; return { ok: true }; }
-    if (tableOrder.includes(newViewName) || tableOrder.some(n => `tbl_${n}` === newViewName) || tabs.some(t => t.viewName === newViewName)) {
+    if (tableOrder.includes(newViewName) || tabs.some(t => t.viewName === newViewName)) {
         return { ok: false, error: `"${newViewName}" is already in use by another table or view.` };
     }
     const oldViewName = tab.viewName;
@@ -912,13 +916,16 @@ function loadCategoriesFromText(text) {
         try {
             const { name, sql } = parseCategoryLine(line);
             assertSafeSelect(sql, allowed);
-            const slug = slugify(name);
-            const viewName = `vw_${slug}`;
+            const viewName = slugify(name);
+            const existing = tabs.find(t => t.kind === 'view' && t.viewName === viewName);
+            if (!existing && tableOrder.includes(viewName)) {
+                throw new Error(`"${viewName}" is already used by a loaded table — pick a different view name.`);
+            }
+
             alasql(`DROP VIEW IF EXISTS [${viewName}]`);
             alasql(`CREATE VIEW [${viewName}] AS ${sql}`);
             allowed.add(viewName);
 
-            const existing = tabs.find(t => t.kind === 'view' && t.viewName === viewName);
             if (existing) {
                 existing.label = name;
                 existing.sql = sql;
@@ -1125,7 +1132,8 @@ function renderTabBar() {
         const label = document.createElement('span');
         label.className = 'tab-label';
         label.textContent = tab.label;
-        label.title = 'Double-click to rename (updates the actual table/view name — SQL can reference the new name afterwards)';
+        const idNote = tab.viewName !== tab.label ? ` In SQL, reference it as exactly "${tab.viewName}" (names get lowercased and spaces/symbols become underscores).` : '';
+        label.title = `Double-click to rename (updates the actual table/view name — SQL can reference the new name afterwards).${idNote}`;
         label.addEventListener('dblclick', ev => {
             ev.stopPropagation();
             beginRenameTab(tab, btn, label);
