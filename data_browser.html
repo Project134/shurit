@@ -113,11 +113,16 @@
     .dropdown-panel .card-body { padding:12px 14px; }
     .dropdown-hint { color:var(--text-dim); font-size:11px; line-height:1.6; margin-bottom:9px; }
 
-    /* ── Column chips ────────────────────────────────────────── */
-    #colManagerWrap { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
-    .col-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:4px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .12s; user-select:none; }
+    /* ── Column rows: hide/show chip + per-column filter ────────── */
+    #colManagerWrap { display:flex; flex-direction:column; gap:6px; }
+    .col-filter-row { display:flex; align-items:center; gap:7px; }
+    .col-chip { display:inline-flex; align-items:center; flex:0 0 38%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:3px 9px; border-radius:4px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .12s; user-select:none; }
     .col-chip:hover { border-color:var(--accent); color:var(--accent); }
     .col-chip.hidden-col { opacity:.35; text-decoration:line-through; border-style:dashed; }
+    .col-filter-input, .col-filter-select { flex:1 1 auto; min-width:0; font-family:var(--mono); font-size:11px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:4px; padding:3px 7px; outline:none; }
+    .col-filter-input:focus, .col-filter-select:focus { border-color:var(--accent); }
+    .col-filter-input.filter-active, .col-filter-select.filter-active { border-color:var(--accent); color:var(--accent); }
+    .col-filter-spacer { flex:1 1 auto; } /* keeps hidden columns' rows aligned even with no filter control shown */
 
     /* ── Table pills (loaded tables, click-to-copy) ─────────────── */
     #tablePillsWrap { display:flex; flex-wrap:wrap; gap:6px; }
@@ -167,6 +172,12 @@
     .tab-toolbar .count { font-size:10px; color:var(--text-dim); }
     .tab-toolbar .spacer { flex:1 1 auto; }
     .tab-toolbar .actions { display:flex; gap:6px; }
+    .quick-filter-wrap { display:flex; align-items:center; gap:4px; }
+    .quick-filter-input { font-family:var(--sans); font-size:12px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:5px; padding:4px 9px; outline:none; width:220px; max-width:40vw; }
+    .quick-filter-input:focus { border-color:var(--accent); }
+    .quick-filter-input.filter-active { border-color:var(--accent); }
+    .quick-filter-clear { cursor:pointer; color:var(--text-dim); font-size:12px; padding:2px 5px; border-radius:3px; user-select:none; }
+    .quick-filter-clear:hover { color:var(--danger, #f75f5f); }
 
     /* ── SQL preview strip (editable) ────────────────────────── */
     .sql-preview { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:6px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:5px; font-family:var(--mono); font-size:11px; color:var(--text-dim); flex-shrink:0; }
@@ -268,18 +279,23 @@
     form <code>view name - SELECT ...</code>:
     <pre>High Priority - select * from orders where priority = 'High' and status != 'Closed' order by due_date asc
 Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id
-Recent - select * from orders where created_at >= '2026-01-01'</pre>
-    Each line must be a full <code>SELECT</code> statement — real SQL, powered by a client-side SQL engine, so
-    <code>JOIN</code>, <code>GROUP BY</code>, aggregate functions and subqueries all work. Reference any loaded
-    table by the exact name shown in the 🗂 Tables panel above and on its tab (case-sensitive — no prefix), or
-    any view already loaded as a tab (including ones from an earlier "Load Categories" — loading is
-    additive, so it never removes views you've already loaded; pasting a line with the same name as an existing
-    view just updates that view in place). The view name can optionally be wrapped in quotes, e.g.
-    <code>"High Priority" - select ...</code>. Column names with spaces or special characters need brackets,
-    e.g. <code>[Job Title]</code>. Once loaded, click a view tab's SQL to edit and re-run it directly.
-    <br><strong>For safety, only plain <code>SELECT</code> queries are allowed</strong> — no
-    <code>INSERT / UPDATE / DELETE / DROP / CREATE</code>, no semicolon-separated statements, and no external
-    file/URL data sources. Anything else is rejected with an explanation below.
+Ranked - select *, row_number() over (partition by category order by amount desc) as rnk from orders</pre>
+    Each line is real SQL, powered by <strong>DuckDB</strong> running entirely in your browser (via WebAssembly) —
+    so <code>JOIN</code>, <code>GROUP BY</code>, window functions (<code>OVER</code>), CTEs (<code>WITH ...</code>),
+    aggregates and subqueries all work. Reference any loaded table by the exact name shown in the 🗂 Tables panel
+    above and on its tab (case-sensitive — no prefix), or any view already loaded as a tab (including ones from an
+    earlier "Load Categories" — loading is additive, so it never removes views you've already loaded; pasting a
+    line with the same name as an existing view just updates that view in place). The view name can optionally be
+    wrapped in quotes, e.g. <code>"High Priority" - select ...</code>. Column names with spaces or special
+    characters need double quotes, e.g. <code>"Job Title"</code>. Once loaded, click a view tab's SQL to edit and
+    re-run it directly.
+    <br><strong>A line starting with <code>SELECT</code> or <code>WITH</code> becomes a live view</strong> (and its
+    own tab). Other statement types — <code>CREATE TABLE</code>, <code>INSERT</code>, <code>UPDATE</code>,
+    <code>DELETE</code>, <code>DROP</code>, etc. — are also allowed and run directly against the in-browser
+    database (handy for staging data before querying it), but they don't get a tab of their own; none of this can
+    ever modify or upload the original <code>.json</code> files, since DuckDB only ever operates on an in-memory
+    copy. Reading from a remote URL (<code>http(s)://</code>, <code>s3://</code>, <code>ftp://</code>) or
+    <code>ATTACH</code>/<code>INSTALL</code> of extensions is blocked, to keep everything local to your browser.
 </div>
 
 <!-- ── Content: exactly one tab's UI, fully rebuilt on every switch ── -->
@@ -302,14 +318,16 @@ Recent - select * from orders where created_at >= '2026-01-01'</pre>
     </div>
 </div>
 
-<!-- ── Dropdown: Columns (show/hide columns for the active tab) ── -->
+<!-- ── Dropdown: Columns (show/hide + per-column filter for the active tab) ── -->
 <div id="columnsDropdown" class="dropdown-panel" style="display:none">
     <div class="card-header">
         <strong>🧱 Columns</strong>
+        <button class="btn btn-outline btn-sm" id="clearColFiltersBtn">✕ Clear Filters</button>
         <button class="btn btn-outline btn-sm" id="showAllColsBtn">Show All</button>
     </div>
     <div class="card-body">
-        <p class="dropdown-hint">Click to hide/show — applies to the active tab only.</p>
+        <p class="dropdown-hint">Click a column name to hide/show it. Each visible column also has a quick filter
+            below it — a dropdown for columns with a small set of values, or a "contains" search otherwise.</p>
         <div id="colManagerWrap"></div>
     </div>
 </div>
@@ -323,19 +341,24 @@ Recent - select * from orders where created_at >= '2026-01-01'</pre>
         </div>
         <div class="modal-body">
             <p class="text-dim text-sm" style="margin-bottom:8px; line-height:1.6;">
-                One view per line, in the form <code>view name - SELECT ...</code> (the name can optionally be
-                quoted, e.g. <code>"High Priority" - select ...</code>). Real SQL — <code>JOIN</code>,
-                <code>GROUP BY</code>, aggregates and subqueries all work. Reference any loaded table by the exact
-                name shown in its pill (case-sensitive — no prefix), or any view already loaded as a tab (from
-                this box or an earlier load — loading here never removes existing views; a name that matches one
-                already loaded just updates that view). Only plain <code>SELECT</code> statements are allowed.
+                One entry per line, in the form <code>name - SQL statement</code> (the name can optionally be
+                quoted, e.g. <code>"High Priority" - select ...</code>). Real SQL, powered by DuckDB —
+                <code>JOIN</code>, <code>GROUP BY</code>, window functions, CTEs, aggregates and subqueries all
+                work. Reference any loaded table by the exact name shown in its pill (case-sensitive — no prefix),
+                or any view already loaded as a tab (from this box or an earlier load — loading here never removes
+                existing views; a name that matches one already loaded just updates that view). A line starting
+                with <code>SELECT</code> or <code>WITH</code> becomes a view (and a tab); other statement types
+                (<code>CREATE TABLE</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>,
+                <code>DROP</code>, …) run directly instead — useful for staging data — but don't get their own
+                tab. Remote URLs and <code>ATTACH</code>/<code>INSTALL</code> are blocked.
                 Note: a view's own name is lowercased and has spaces/symbols turned into underscores for use in
                 SQL (e.g. "High Priority" → <code>high_priority</code>) — hover a view's tab to see its exact
                 identifier.
             </p>
             <textarea id="catModalTextarea" class="cat-modal-textarea" spellcheck="false"
                 placeholder='"High Priority" - select * from orders where priority = &#39;High&#39; and status != &#39;Closed&#39; order by due_date asc
-Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id'></textarea>
+Order Detail - select o.id, o.amount, c.name from orders o join customers c on o.cust_id = c.id
+Ranked - select *, row_number() over (partition by category order by amount desc) as rnk from orders'></textarea>
             <label class="btn btn-outline btn-sm btn-file" style="margin-top:8px;" title="Populate the box above from a text file, so you can still review or edit it before loading">
                 📎 Load from a text file…<input type="file" id="catModalFileInput" accept=".txt,.sql,text/plain">
             </label>
@@ -347,26 +370,75 @@ Order Detail - select o.id, o.amount, c.name from orders o join customers c on o
     </div>
 </div>
 
-<!--
-  AlaSQL (the client-side SQL engine that powers the "SQL views" feature) is
-  loaded below from jsDelivr — a widely used, open-source CDN — pinned to an
-  exact version and verified with Subresource Integrity (SRI): the browser
-  computes a cryptographic hash of whatever it receives and refuses to run it
-  if that hash doesn't match exactly, so a compromised or substituted CDN
-  response is blocked automatically. No local copy of the library is required.
+<!-- ── DuckDB-Wasm source consent modal — shown once at startup, and ONLY if
+     no local copy is found under ./duckdb-wasm/. No network request for the
+     SQL engine happens before the person explicitly clicks "Download & Continue"
+     here. ──────────────────────────────────────────────────────────────── -->
+<div id="duckdbModalBackdrop" class="modal-backdrop" style="display:none">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="duckdbModalTitle" style="max-width:560px;">
+        <div class="modal-header">
+            <strong id="duckdbModalTitle">⚠ SQL engine not found locally</strong>
+        </div>
+        <div class="modal-body" style="line-height:1.7;">
+            <p id="duckdbModalReason">No local copy of <strong>DuckDB-Wasm</strong> (the SQL engine this page runs on)
+               was found under <code>./duckdb-wasm/</code>, next to this HTML file.</p>
+            <p style="margin-top:10px;">If you click Continue, this page will fetch exactly one thing over the network:</p>
+            <pre style="font-family:var(--mono); font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:5px; padding:8px 10px; margin:8px 0; white-space:pre-wrap; word-break:break-word; color:var(--text);">@duckdb/duckdb-wasm@<span id="duckdbModalVersion"></span> from cdn.jsdelivr.net</pre>
+            <p>That exact version is hard-coded and never changes automatically. It's the first release published
+               after <strong>1.29.2</strong> was briefly compromised in a September 2025 npm supply-chain attack
+               (CVE-2025-59037) — so this page can never silently float to "latest" and pick up an unreviewed build.
+               Nothing about your loaded data is ever sent anywhere, on this or any other path.</p>
+            <details style="margin-top:10px;">
+                <summary style="cursor:pointer; color:var(--accent);">Prefer zero network requests? Click here</summary>
+                <p class="text-dim text-sm" style="margin-top:6px;">Cancel below, then create a <code>duckdb-wasm/</code>
+                   folder next to this HTML file containing these files from the official
+                   <code>@duckdb/duckdb-wasm@<span class="duckdb-version-inline"></span></code> npm package's
+                   <code>dist/</code> folder:</p>
+                <pre style="font-family:var(--mono); font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:5px; padding:8px 10px; margin:6px 0;">duckdb-wasm/
+  duckdb-browser.mjs
+  duckdb-mvp.wasm
+  duckdb-browser-mvp.worker.js
+  duckdb-eh.wasm
+  duckdb-browser-eh.worker.js
+  duckdb-coi.wasm
+  duckdb-browser-coi.worker.js
+  duckdb-browser-coi.pthread.worker.js</pre>
+                <p class="text-dim text-sm">e.g. <code>npm pack @duckdb/duckdb-wasm@<span class="duckdb-version-inline"></span></code>
+                   and copy <code>package/dist/*</code> in — never from a random mirror or search result. Reload the
+                   page afterward; this prompt won't appear again once those files are found. (If you're opening this
+                   file directly by double-clicking it, some browsers block a page from reading local sibling files
+                   at all — serving the folder via a small local web server, e.g. <code>python3 -m http.server</code>,
+                   avoids that.)</p>
+            </details>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" id="duckdbModalCancelBtn">Cancel</button>
+            <button class="btn btn-primary" id="duckdbModalContinueBtn">Download &amp; Continue</button>
+        </div>
+    </div>
+</div>
 
-  If your network blocks this CDN, the app will automatically fall back to a
-  local alasql.min.js placed next to this HTML file, if one is present (see
-  the on-page message that appears in that case for a download link).
+<!--
+  DuckDB-Wasm (the client-side SQL engine that powers this whole page — real
+  DuckDB, compiled to WebAssembly, running entirely inside your browser) is
+  resolved local-first:
+
+    1. On startup, this page looks for a self-hosted copy under ./duckdb-wasm/
+       next to this HTML file. If found, it's used directly and NOTHING is
+       ever fetched from the network.
+    2. Only if that's missing does it ask — via the modal above — before
+       falling back to a CDN (jsDelivr) import, and even then only ever an
+       exact pinned version: 1.30.0. That version is pinned deliberately, not
+       just for reproducibility: an earlier release, 1.29.2, was briefly
+       compromised in a supply-chain attack in September 2025 (CVE-2025-59037)
+       before being removed from npm; 1.30.0 was the first clean release
+       published afterwards. Pinning to it (rather than "latest") avoids ever
+       silently picking up a different, unreviewed build in the future.
+
+  See ensureDuckDB()/tryLoadLocalDuckDB() near the bottom of the script for
+  the actual resolution logic.
 -->
-<script
-    src="https://cdn.jsdelivr.net/npm/alasql@4.17.3/dist/alasql.min.js"
-    integrity="sha384-hvJpRMAMqFAISFvlctsO27TVMidl+sALbFEvhYVqEyGZxcxTqlNpWhuo+bc7XlXY sha512-yNKkipkk04lU3f4JlY8hw87T3kMS2ptcutlRbSzwn40cC8a5CwpJwEEuqnYOHi7wI6YVY6zXfQ8mqH/ZnYL51A=="
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer"
-    onerror="window.__alasqlCdnFailed = true;"
-></script>
-<script>
+<script type="module">
 'use strict';
 
 // ═══════════════════════════════════════════════════════════
@@ -382,7 +454,8 @@ let dataVersion    = 0;    // bumped whenever any table/view's underlying data c
 // name, closeable) — neither carries any naming prefix, so SQL can reference either one
 // by exactly the name shown on its tab. Each tab: { key, kind:'table'|'view', label,
 // viewName, sourceTable, raw, sql, hiddenColumns:Set, sorts:[], colWidths:{},
-// _rowsCache, _rowsCacheVersion, _colsCache, _colsCacheVersion }
+// quickFilter:'', columnFilters:{}, _rowsCache, _rowsCacheVersion, _colsCache,
+// _colsCacheVersion, _filterMetaCache, _filterMetaCacheVersion }
 let tabs           = [];
 let activeTabKey   = null;
 let categoryErrors = [];
@@ -395,6 +468,10 @@ function safeLoadClickedItems() {
     try { return JSON.parse(localStorage.getItem('clickedItems') || '[]'); }
     catch (e) { return []; }
 }
+
+// DuckDB-Wasm handles — set once by ensureDuckDB() at startup.
+let db   = null;   // AsyncDuckDB instance
+let conn = null;   // its one open connection, reused for the whole session
 
 // ── Theme ────────────────────────────────────────────────
 let isDark = true;
@@ -451,7 +528,9 @@ document.addEventListener('mousedown', e => {
 });
 
 // ═══════════════════════════════════════════════════════════
-//  DATE / TYPE / VALUE HELPERS  (sorting engine)
+//  DATE / TYPE / VALUE HELPERS  (client-side sorting/display engine —
+//  unchanged from the AlaSQL version: this operates on plain JS row objects
+//  already fetched from DuckDB, not on SQL)
 // ═══════════════════════════════════════════════════════════
 const MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
 function parseDate(s) {
@@ -588,95 +667,105 @@ function slugify(raw) {
     if (/^[0-9]/.test(s)) s = 'v_'+s;
     return s;
 }
+// DuckDB quotes identifiers with double quotes (ANSI SQL), not the square
+// brackets AlaSQL used. Names only ever come from sanitizeTableName/slugify
+// above, which never produce a double quote, so simple wrapping is safe.
+function q(identifier) { return `"${identifier}"`; }
 
 // ═══════════════════════════════════════════════════════════
 //  SAFE SQL GATE
-//  Only a single, plain SELECT statement is allowed, and it may only read
-//  from tables/views this tool created. Validated against AlaSQL's own
-//  parser output — not string matching — so it can't be bypassed with
-//  comments, casing, or whitespace tricks.
+//  Unlike the previous AlaSQL version, this no longer restricts *which*
+//  statement types are allowed — CREATE TABLE, INSERT, UPDATE, DELETE, DROP
+//  etc. are all fine, because none of them can ever touch the original
+//  .json files (DuckDB only ever operates on an in-memory copy loaded at
+//  import time). The one thing still blocked is anything that would make
+//  the browser fetch or attach an external resource, since that would
+//  break this page's "nothing ever leaves your browser" promise.
 // ═══════════════════════════════════════════════════════════
+function assertNoRemoteAccess(sql) {
+    if (/^\s*(attach|install)\b/i.test(sql)) {
+        throw new Error('ATTACH/INSTALL statements are not allowed — this tool never fetches external data or extensions.');
+    }
+    if (/\b(?:https?|s3|gcs|azure|ftp):\/\//i.test(sql)) {
+        throw new Error('Remote URLs are not allowed — this tool only queries data already loaded into your browser.');
+    }
+}
+// Best-effort extraction of table/view identifiers a SQL statement reads
+// from (used only for the "N of M records" display and for warning about
+// views that break on rename — never for security). DuckDB doesn't expose
+// a JS-side parse tree the way AlaSQL did, so this is a regex heuristic
+// rather than a real AST walk; it can miss exotic SQL, which only means
+// those two cosmetic features silently no-op, nothing more.
+function extractReferencedIdentifiers(sql) {
+    const ids = new Set();
+    const re = /\b(?:from|join)\s+"([^"]+)"|\b(?:from|join)\s+\[([^\]]+)\]|\b(?:from|join)\s+([A-Za-z_][A-Za-z0-9_]*)/gi;
+    let m;
+    while ((m = re.exec(sql))) ids.add(m[1] || m[2] || m[3]);
+    return ids;
+}
+function guessPrimaryTable(sql) {
+    const ids = [...extractReferencedIdentifiers(sql)];
+    return ids.length ? ids[0] : null;
+}
+function viewReferencesAny(sql, identifiers) {
+    const ids = extractReferencedIdentifiers(sql);
+    for (const id of ids) if (identifiers.has(id)) return true;
+    return false;
+}
 function knownQueryTargets() {
     const s = new Set();
     tableOrder.forEach(n => s.add(n));
     tabs.filter(t=>t.kind==='view').forEach(t => s.add(t.viewName));
     return s;
 }
-function isSelectShape(st) {
-    return Array.isArray(st.columns) && Array.isArray(st.from) && st.from.length > 0 && !('explain' in st);
+
+// ═══════════════════════════════════════════════════════════
+//  ARROW → PLAIN JS  (DuckDB-Wasm returns query results as an Apache Arrow
+//  table; convert every row to a plain object with plain JS values so the
+//  rest of this app — sorting, the grid, CSV/JSON export — never has to
+//  know DuckDB or Arrow exist. BigInt (from 64-bit integer columns) and
+//  Date (from DATE/TIMESTAMP columns) are normalized to values esc()/CSV/
+//  JSON.stringify can all handle directly.)
+// ═══════════════════════════════════════════════════════════
+function plainValue(v) {
+    if (v === null || v === undefined) return v;
+    if (typeof v === 'bigint') return Number.isSafeInteger(Number(v)) ? Number(v) : v.toString();
+    if (v instanceof Date) {
+        const iso = v.toISOString();
+        return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso;
+    }
+    if (Array.isArray(v)) return v.map(plainValue);
+    if (typeof v === 'object') {
+        if (typeof v.toJSON === 'function') { try { return plainValue(v.toJSON()); } catch (e) { /* fall through */ } }
+        const out = {};
+        for (const k in v) out[k] = plainValue(v[k]);
+        return out;
+    }
+    return v;
 }
-function validateFromTargets(node, allowed) {
-    if (!node || typeof node !== 'object') return;
-    if (node.into) throw new Error('"SELECT ... INTO" is not allowed — views cannot create or modify tables.');
-    const targets = [];
-    if (Array.isArray(node.from))  targets.push(...node.from);
-    if (Array.isArray(node.joins)) node.joins.forEach(j => targets.push(j.table));
-    if (Array.isArray(node.queries)) node.queries.forEach(q => validateFromTargets(q, allowed));
-    targets.forEach(t => {
-        if (!t) return;
-        if (t.funcid) throw new Error(`External data source "${t.funcid}(...)" is not allowed — only loaded tables/views can be queried.`);
-        if (t.tableid) {
-            if (!allowed.has(t.tableid)) throw new Error(`Unknown table/view "${t.tableid}". Available: ${[...allowed].join(', ') || '(none)'}`);
-        } else if (t.from || t.columns) {
-            validateFromTargets(t, allowed);
-        }
+function arrowResultToRows(result) {
+    return result.toArray().map(r => {
+        const obj = typeof r.toJSON === 'function' ? r.toJSON() : { ...r };
+        const out = {};
+        for (const k in obj) out[k] = plainValue(obj[k]);
+        return out;
     });
-}
-function assertSafeSelect(sql, allowed) {
-    let ast;
-    try { ast = alasql.parse(sql); }
-    catch (e) { throw new Error('SQL syntax error: ' + firstLine(e.message)); }
-    if (!ast.statements || ast.statements.length !== 1) {
-        throw new Error('Only a single SELECT statement is allowed (no semicolon-separated statements).');
-    }
-    const st = ast.statements[0];
-    if (!isSelectShape(st)) throw new Error('Only SELECT statements (with a FROM clause) are allowed — no INSERT/UPDATE/DELETE/DROP/CREATE/etc.');
-    if (st.into) throw new Error('"SELECT ... INTO" is not allowed — views cannot create or modify tables.');
-    validateFromTargets(st, allowed);
-}
-function guessPrimaryTable(sql) {
-    try {
-        let node = alasql.parse(sql).statements[0];
-        for (let i=0;i<20;i++) {
-            if (!node.from || !node.from[0]) return null;
-            const f = node.from[0];
-            if (f.tableid) return f.tableid;
-            if (f.from) { node = f; continue; }
-            return null;
-        }
-        return null;
-    } catch (e) { return null; }
-}
-function viewReferencesAny(sql, identifiers) {
-    let found = false;
-    function walk(node) {
-        if (!node || typeof node !== 'object' || found) return;
-        const targets = [];
-        if (Array.isArray(node.from))  targets.push(...node.from);
-        if (Array.isArray(node.joins)) node.joins.forEach(j => targets.push(j.table));
-        if (Array.isArray(node.queries)) node.queries.forEach(walk);
-        targets.forEach(t => {
-            if (!t || found) return;
-            if (t.tableid && identifiers.has(t.tableid)) found = true;
-            else if (t.from || t.columns) walk(t);
-        });
-    }
-    try {
-        const ast = alasql.parse(sql);
-        (ast.statements || []).forEach(walk);
-    } catch (e) { /* best effort */ }
-    return found;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  ALASQL TABLE / VIEW MANAGEMENT
+//  DUCKDB TABLE / VIEW MANAGEMENT
 // ═══════════════════════════════════════════════════════════
-function ensureAlaSQLTable(name) {
-    if (!alasql.tables[name]) alasql(`CREATE TABLE IF NOT EXISTS [${name}]`);
+async function setDuckDBTableData(name, data) {
+    // A fresh, unique virtual filename per call avoids any ambiguity about
+    // whether re-registering a file under the same name replaces it.
+    const fileName = `__data_${name}_${Date.now()}_${Math.random().toString(36).slice(2)}.json`;
+    await db.registerFileText(fileName, JSON.stringify(data));
+    await conn.query(`CREATE OR REPLACE TABLE ${q(name)} AS SELECT * FROM read_json_auto('${fileName}')`);
 }
-function setAlaSQLTableData(name, data) {
-    ensureAlaSQLTable(name);
-    alasql.tables[name].data = data;
+function invalidateTabCache(tab) {
+    tab._rowsCache = null; tab._rowsCacheVersion = -1;
+    tab._colsCache = null; tab._colsCacheVersion = -1;
+    tab._filterMetaCache = null; tab._filterMetaCacheVersion = -1;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -731,7 +820,7 @@ function mergedTableName(names) {
     return joined.length <= 60 ? joined : `${sorted[0]}+${sorted.length - 1}more`;
 }
 
-function loadJsonTable(json, rawName, sourceFiles) {
+async function loadJsonTable(json, rawName, sourceFiles) {
     if (!Array.isArray(json) || !json.length) {
         alert(`"${rawName}": JSON must be a non-empty array of records.`);
         return;
@@ -741,7 +830,7 @@ function loadJsonTable(json, rawName, sourceFiles) {
         alert(`"${rawName}": a view named "${name}" is already loaded — rename or remove that view first, or rename this file.`);
         return;
     }
-    setAlaSQLTableData(name, json);
+    await setDuckDBTableData(name, json);
     dataVersion++;
 
     const urlColumn = detectUrlColumn(json);
@@ -753,9 +842,11 @@ function loadJsonTable(json, rawName, sourceFiles) {
     if (!tab) {
         tab = {
             key: name, kind: 'table', label: name, viewName: name,
-            sourceTable: name, raw: null, sql: `SELECT * FROM [${name}]`,
+            sourceTable: name, raw: null, sql: `SELECT * FROM ${q(name)}`,
             hiddenColumns: new Set(), sorts: [], colWidths: {},
-            _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1
+            quickFilter: '', columnFilters: {},
+            _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
+            _filterMetaCache: null, _filterMetaCacheVersion: -1
         };
         tabs.push(tab);
     }
@@ -779,15 +870,15 @@ async function handleLoadedFiles(entries) {
         r.json.forEach(row => { g.rows.push(row); g.rowSources.set(row, r.name); });
     });
 
-    groups.forEach(g => {
+    for (const g of groups.values()) {
         let rows = g.rows;
         if (g.names.length > 1) {
             rows = g.hasId ? dedupeByIdWithSource(g.rows, g.rowSources) : tagRowsWithSource(g.rows, g.rowSources);
         }
-        loadJsonTable(rows, mergedTableName(g.names), g.names);
-    });
+        await loadJsonTable(rows, mergedTableName(g.names), g.names);
+    }
 
-    renderAll();
+    await renderAll();
 }
 async function collectJsonFilesFromHandle(dirHandle, out = []) {
     for await (const [name, handle] of dirHandle.entries()) {
@@ -810,29 +901,29 @@ function setFolderLoadingState(loading) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  RENAMING  (a genuine rename of the underlying AlaSQL identifier)
+//  RENAMING  (a genuine rename of the underlying DuckDB identifier — DuckDB
+//  supports ALTER TABLE ... RENAME TO directly, so unlike the old AlaSQL
+//  version this no longer needs to copy the table's data by hand)
 // ═══════════════════════════════════════════════════════════
-function performRename(tab, newRawLabel) {
+async function performRename(tab, newRawLabel) {
     const trimmed = String(newRawLabel).trim();
     if (!trimmed) return { ok: false, error: 'Name cannot be empty.' };
-    return tab.kind === 'table' ? renameTable(tab.sourceTable, trimmed, tab) : renameView(tab, trimmed);
+    return tab.kind === 'table' ? await renameTable(tab.sourceTable, trimmed, tab) : await renameView(tab, trimmed);
 }
-function renameTable(oldName, newRawLabel, tab) {
+async function renameTable(oldName, newRawLabel, tab) {
     const newName = sanitizeTableName(newRawLabel);
     if (newName === oldName) { tab.label = newRawLabel; return { ok: true }; }
     if (loadedTables[newName]) return { ok: false, error: `A table named "${newName}" already exists — pick a different name.` };
     if (tabs.some(t => t.kind === 'view' && t.viewName === newName)) return { ok: false, error: `"${newName}" conflicts with an existing view name.` };
 
     const meta = loadedTables[oldName];
-    const data = (alasql.tables[oldName] && alasql.tables[oldName].data) || [];
     const oldIdentifiers = new Set([oldName]);
     const brokenViews = tabs.filter(t => t.kind === 'view' && viewReferencesAny(t.sql, oldIdentifiers));
-    brokenViews.forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+    for (const t of brokenViews) { try { await conn.query(`DROP VIEW IF EXISTS ${q(t.viewName)}`); } catch (e) {} }
     if (brokenViews.length) tabs = tabs.filter(t => !brokenViews.includes(t));
 
     try {
-        alasql(`DROP TABLE IF EXISTS [${oldName}]`);
-        setAlaSQLTableData(newName, data);
+        await conn.query(`ALTER TABLE ${q(oldName)} RENAME TO ${q(newName)}`);
     } catch (e) {
         return { ok: false, error: 'Could not rename table: ' + e.message };
     }
@@ -846,10 +937,9 @@ function renameTable(oldName, newRawLabel, tab) {
     tab.key = newName;
     tab.viewName = newName;
     tab.sourceTable = newName;
-    tab.sql = `SELECT * FROM [${newName}]`;
+    tab.sql = `SELECT * FROM ${q(newName)}`;
     tab.label = newRawLabel;
-    tab._rowsCache = null; tab._rowsCacheVersion = -1;
-    tab._colsCache = null; tab._colsCacheVersion = -1;
+    invalidateTabCache(tab);
     if (activeTabKey === oldName) activeTabKey = tab.key;
 
     if (brokenViews.length) {
@@ -857,7 +947,7 @@ function renameTable(oldName, newRawLabel, tab) {
     }
     return { ok: true };
 }
-function renameView(tab, newRawLabel) {
+async function renameView(tab, newRawLabel) {
     const newViewName = slugify(newRawLabel);
     if (newViewName === tab.viewName) { tab.label = newRawLabel; return { ok: true }; }
     if (tableOrder.includes(newViewName) || tabs.some(t => t.viewName === newViewName)) {
@@ -865,20 +955,19 @@ function renameView(tab, newRawLabel) {
     }
     const oldViewName = tab.viewName;
     try {
-        alasql(`CREATE VIEW [${newViewName}] AS ${tab.sql}`);
-        alasql(`DROP VIEW IF EXISTS [${oldViewName}]`);
+        await conn.query(`CREATE OR REPLACE VIEW ${q(newViewName)} AS ${tab.sql}`);
+        await conn.query(`DROP VIEW IF EXISTS ${q(oldViewName)}`);
     } catch (e) {
         return { ok: false, error: 'Could not rename view: ' + e.message };
     }
     tab.key = newViewName;
     tab.viewName = newViewName;
     tab.label = newRawLabel;
-    tab._rowsCache = null; tab._rowsCacheVersion = -1;
-    tab._colsCache = null; tab._colsCacheVersion = -1;
+    invalidateTabCache(tab);
     if (activeTabKey === oldViewName) activeTabKey = newViewName;
 
     const brokenViews = tabs.filter(t => t.kind === 'view' && t !== tab && viewReferencesAny(t.sql, new Set([oldViewName])));
-    brokenViews.forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+    for (const t of brokenViews) { try { await conn.query(`DROP VIEW IF EXISTS ${q(t.viewName)}`); } catch (e) {} }
     if (brokenViews.length) {
         tabs = tabs.filter(t => !brokenViews.includes(t));
         categoryErrors = [...categoryErrors, ...brokenViews.map(t => `View "${t.label}" was removed because it referenced "${oldViewName}", which was renamed. Update your category SQL to use the new name and reload it.`)];
@@ -888,78 +977,84 @@ function renameView(tab, newRawLabel) {
 
 // ═══════════════════════════════════════════════════════════
 //  CATEGORY (SQL VIEW) LOADING — additive: never removes existing views;
-//  a name matching one already loaded updates that view in place.
+//  a name matching one already loaded updates that view in place. A line
+//  beginning with SELECT or WITH becomes a live view (and a tab); any other
+//  statement type runs directly against DuckDB instead (see the in-page
+//  hint text for why that's safe).
 // ═══════════════════════════════════════════════════════════
 function parseCategoryLine(line) {
     const sep = line.match(/^(.*?)\s+-\s+([\s\S]+)$/);
-    if (!sep) throw new Error(`Could not find "<view name> - <SELECT statement>" in: ${line}`);
+    if (!sep) throw new Error(`Could not find "<name> - <SQL statement>" in: ${line}`);
     let name = sep[1].trim();
     const quoted = name.match(/^(["'])([\s\S]*)\1$/);
     if (quoted) name = quoted[2].trim();
     let sql = sep[2].trim().replace(/;\s*$/, '');
-    if (!name) throw new Error('Missing view name');
+    if (!name) throw new Error('Missing name');
     if (!sql)  throw new Error('Missing SQL statement');
-    if (!/^select\b/i.test(sql)) throw new Error(`must be a full SELECT statement, e.g. "select * from ${tableOrder[0] || 'your_table'} where ..."`);
     return { name, sql };
 }
-function loadCategoriesFromText(text) {
+async function loadCategoriesFromText(text) {
     if (!tableOrder.length) { alert('Load at least one data table first, then load your category SQL.'); return; }
 
     const lines = text.split(/\r?\n/);
-    const warnings = [];
-    const allowed = knownQueryTargets();
+    const messages = [];
     const touchedTabs = [];
 
-    lines.forEach((rawLine, i) => {
-        const line = rawLine.trim();
-        if (!line || line.startsWith('#') || line.startsWith('//')) return;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.startsWith('#') || line.startsWith('//')) continue;
         try {
             const { name, sql } = parseCategoryLine(line);
-            assertSafeSelect(sql, allowed);
-            const viewName = slugify(name);
-            const existing = tabs.find(t => t.kind === 'view' && t.viewName === viewName);
-            if (!existing && tableOrder.includes(viewName)) {
-                throw new Error(`"${viewName}" is already used by a loaded table — pick a different view name.`);
-            }
+            assertNoRemoteAccess(sql);
+            const isQuery = /^(select|with)\b/i.test(sql);
 
-            alasql(`DROP VIEW IF EXISTS [${viewName}]`);
-            alasql(`CREATE VIEW [${viewName}] AS ${sql}`);
-            allowed.add(viewName);
+            if (isQuery) {
+                const viewName = slugify(name);
+                const existing = tabs.find(t => t.kind === 'view' && t.viewName === viewName);
+                if (!existing && tableOrder.includes(viewName)) {
+                    throw new Error(`"${viewName}" is already used by a loaded table — pick a different view name.`);
+                }
+                await conn.query(`CREATE OR REPLACE VIEW ${q(viewName)} AS ${sql}`);
 
-            if (existing) {
-                existing.label = name;
-                existing.sql = sql;
-                existing.raw = line;
-                existing.sourceTable = guessPrimaryTable(sql);
-                existing._rowsCache = null; existing._rowsCacheVersion = -1;
-                existing._colsCache = null; existing._colsCacheVersion = -1;
-                touchedTabs.push(existing);
+                if (existing) {
+                    existing.label = name;
+                    existing.sql = sql;
+                    existing.raw = line;
+                    existing.sourceTable = guessPrimaryTable(sql);
+                    invalidateTabCache(existing);
+                    touchedTabs.push(existing);
+                } else {
+                    const tab = {
+                        key: viewName, kind: 'view', label: name, viewName,
+                        sourceTable: guessPrimaryTable(sql), raw: line, sql,
+                        hiddenColumns: new Set(), sorts: [], colWidths: {},
+                        quickFilter: '', columnFilters: {},
+                        _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
+                        _filterMetaCache: null, _filterMetaCacheVersion: -1
+                    };
+                    tabs.push(tab);
+                    touchedTabs.push(tab);
+                }
             } else {
-                const tab = {
-                    key: viewName, kind: 'view', label: name, viewName,
-                    sourceTable: guessPrimaryTable(sql), raw: line, sql,
-                    hiddenColumns: new Set(), sorts: [], colWidths: {},
-                    _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1
-                };
-                tabs.push(tab);
-                touchedTabs.push(tab);
+                await conn.query(sql);
+                messages.push(`✓ Line ${i + 1}: ran successfully (not a SELECT, so no tab was created — query the result with a separate "name - SELECT ..." line if you want to browse it).`);
             }
         } catch (e) {
-            warnings.push(`✕ Line ${i + 1}: ${e.message}`);
+            messages.push(`✕ Line ${i + 1}: ${firstLine(e.message)}`);
         }
-    });
+    }
 
     dataVersion++;
     if (touchedTabs.length) activeTabKey = touchedTabs[0].key;
-    categoryErrors = warnings;
-    renderAll();
+    categoryErrors = messages;
+    await renderAll();
 }
-function clearCategories() {
-    tabs.filter(t => t.kind === 'view').forEach(t => { try { alasql(`DROP VIEW IF EXISTS [${t.viewName}]`); } catch (e) {} });
+async function clearCategories() {
+    for (const t of tabs.filter(t => t.kind === 'view')) { try { await conn.query(`DROP VIEW IF EXISTS ${q(t.viewName)}`); } catch (e) {} }
     tabs = tabs.filter(t => t.kind === 'table');
     categoryErrors = [];
     activeTabKey = tabs.length ? tabs[0].key : null;
-    renderAll();
+    await renderAll();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -984,7 +1079,12 @@ function copyText(text) {
 // ═══════════════════════════════════════════════════════════
 function escCsvField(v) {
     if (v == null) return '';
-    const s = String(v);
+    let s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    // Formula/DDE injection guard: a field starting with =, +, -, @, tab, or CR can be
+    // interpreted as a live formula by Excel/Sheets when this CSV is opened there later.
+    // Prefixing with an apostrophe forces it to be read as literal text; real CSV
+    // parsers (and re-importing into this tool) are unaffected.
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
     if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
     return s;
 }
@@ -1005,7 +1105,7 @@ function triggerDownload(content, filename, mime) {
 // ═══════════════════════════════════════════════════════════
 //  MASTER RENDER
 // ═══════════════════════════════════════════════════════════
-function renderAll() {
+async function renderAll() {
     document.getElementById('catFileBtn').style.display     = tableOrder.length ? '' : 'none';
     document.getElementById('clearCatBtn').style.display    = tabs.some(t => t.kind === 'view') ? '' : 'none';
     document.getElementById('hideVisitedBtn').style.display = tableOrder.length ? '' : 'none';
@@ -1022,7 +1122,7 @@ function renderAll() {
     renderTablePills();
     renderCategoryErrors();
     renderTabBar();
-    renderContent();
+    await renderContent();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1046,7 +1146,7 @@ function renderTablePills() {
             pill.title = meta.rawName !== name ? `Loaded from "${meta.rawName}" — click to copy table name + columns` : 'Click to copy table name + columns';
         }
         pill.addEventListener('click', () => {
-            const colLines = meta.allKeys.map(c => /^[A-Za-z_][A-Za-z0-9_]*$/.test(c) ? c : `[${c}]`);
+            const colLines = meta.allKeys.map(c => /^[A-Za-z_][A-Za-z0-9_]*$/.test(c) ? c : `"${c}"`);
             const text = `table name - ${name}\n\ncolumns\n${colLines.join('\n')}`;
             copyText(text).then(() => {
                 pill.classList.add('copied');
@@ -1063,25 +1163,86 @@ function closeDropdownIfOpen(id) { if (openDropdownId === id) closeAllDropdowns(
 // ═══════════════════════════════════════════════════════════
 //  COLUMN MANAGER  (scoped to the active tab; lives inside the Columns dropdown)
 // ═══════════════════════════════════════════════════════════
-function renderColManager(tab, cols) {
+function findColFilterInput(col) {
+    const wrap = document.getElementById('colManagerWrap');
+    const row = [...wrap.querySelectorAll('.col-filter-row')].find(r => r.dataset.col === col);
+    return row ? row.querySelector('.col-filter-input') : null;
+}
+function renderColManager(tab, cols, filterMeta) {
     const wrap = document.getElementById('colManagerWrap');
     wrap.innerHTML = '';
     cols.forEach(col => {
+        const row = document.createElement('div');
+        row.className = 'col-filter-row';
+        row.dataset.col = col;
+
         const chip = document.createElement('span');
         chip.className = 'col-chip' + (tab.hiddenColumns.has(col) ? ' hidden-col' : '');
         chip.textContent = col;
         chip.title = tab.hiddenColumns.has(col) ? 'Click to show' : 'Click to hide';
-        chip.addEventListener('click', () => {
+        chip.addEventListener('click', async () => {
             tab.hiddenColumns.has(col) ? tab.hiddenColumns.delete(col) : tab.hiddenColumns.add(col);
-            renderContent(); // the dropdown itself stays open — see the geometry-based outside-click logic above
+            await renderContent(); // the dropdown itself stays open — see the geometry-based outside-click logic above
         });
-        wrap.appendChild(chip);
+        row.appendChild(chip);
+
+        if (tab.hiddenColumns.has(col)) {
+            // Hidden columns keep no filter control (their filter, if any, is
+            // preserved but not applied — see rowMatchesColumnFilters) — a spacer
+            // keeps every row's chip aligned to the same width regardless.
+            const spacer = document.createElement('span');
+            spacer.className = 'col-filter-spacer';
+            row.appendChild(spacer);
+        } else {
+            const meta = (filterMeta && filterMeta[col]) || { mode: 'text' };
+            const current = tab.columnFilters[col] || '';
+            if (meta.mode === 'select') {
+                const select = document.createElement('select');
+                select.className = 'col-filter-select' + (current ? ' filter-active' : '');
+                select.title = `Filter "${col}" to an exact value`;
+                select.innerHTML = `<option value="">All</option>` +
+                    meta.values.map(v => `<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(v)}</option>`).join('');
+                select.addEventListener('change', async () => {
+                    if (select.value) tab.columnFilters[col] = select.value; else delete tab.columnFilters[col];
+                    await renderContent();
+                });
+                row.appendChild(select);
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'col-filter-input' + (current ? ' filter-active' : '');
+                input.placeholder = 'contains…';
+                input.value = current;
+                input.title = `Filter "${col}" — matches any part of the value, case-insensitive`;
+                let debounce = null;
+                input.addEventListener('input', () => {
+                    if (input.value) tab.columnFilters[col] = input.value; else delete tab.columnFilters[col];
+                    const cursor = input.selectionStart;
+                    clearTimeout(debounce);
+                    debounce = setTimeout(async () => {
+                        await renderContent();
+                        const revived = findColFilterInput(col);
+                        if (revived) { revived.focus(); try { revived.setSelectionRange(cursor, cursor); } catch (e) {} }
+                    }, 160);
+                });
+                input.addEventListener('keydown', ev => {
+                    if (ev.key === 'Escape' && input.value) { ev.preventDefault(); ev.stopPropagation(); delete tab.columnFilters[col]; renderContent(); }
+                });
+                row.appendChild(input);
+            }
+        }
+        wrap.appendChild(row);
     });
 }
-document.getElementById('showAllColsBtn').addEventListener('click', () => {
+document.getElementById('showAllColsBtn').addEventListener('click', async () => {
     const tab = tabs.find(t => t.key === activeTabKey);
     if (tab) tab.hiddenColumns.clear();
-    renderContent();
+    await renderContent();
+});
+document.getElementById('clearColFiltersBtn').addEventListener('click', async () => {
+    const tab = tabs.find(t => t.key === activeTabKey);
+    if (tab) tab.columnFilters = {};
+    await renderContent();
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1093,10 +1254,10 @@ function updateHideVisitedBtn() {
     btn.classList.toggle('btn-primary', hideVisited);
     btn.classList.toggle('btn-outline', !hideVisited);
 }
-document.getElementById('hideVisitedBtn').addEventListener('click', () => {
+document.getElementById('hideVisitedBtn').addEventListener('click', async () => {
     hideVisited = !hideVisited;
     updateHideVisitedBtn();
-    renderContent();
+    await renderContent();
 });
 updateHideVisitedBtn();
 
@@ -1108,7 +1269,7 @@ function renderCategoryErrors() {
     const el = document.getElementById('catErrorBanner');
     if (!categoryErrors.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
     el.style.display = 'block';
-    el.innerHTML = `<strong>${categoryErrors.length} issue${categoryErrors.length !== 1 ? 's' : ''} while parsing categories:</strong>` +
+    el.innerHTML = `<strong>${categoryErrors.length} note${categoryErrors.length !== 1 ? 's' : ''} while loading categories:</strong>` +
         `<ul>${categoryErrors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`;
 }
 
@@ -1153,21 +1314,21 @@ function renderTabBar() {
         if (tab.kind === 'view') {
             const close = document.createElement('span');
             close.className = 'tab-close'; close.textContent = '×'; close.title = 'Remove view';
-            close.addEventListener('click', ev => {
+            close.addEventListener('click', async ev => {
                 ev.stopPropagation();
-                try { alasql(`DROP VIEW IF EXISTS [${tab.viewName}]`); } catch (e) {}
+                try { await conn.query(`DROP VIEW IF EXISTS ${q(tab.viewName)}`); } catch (e) {}
                 tabs = tabs.filter(t => t.key !== tab.key);
                 if (activeTabKey === tab.key) activeTabKey = tabs.length ? tabs[0].key : null;
                 document.getElementById('clearCatBtn').style.display = tabs.some(t => t.kind === 'view') ? '' : 'none';
-                renderTabBar(); renderContent();
+                renderTabBar(); await renderContent();
             });
             btn.appendChild(close);
         }
 
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             if (activeTabKey === tab.key) return; // already showing it — avoid an unnecessary rebuild
             activeTabKey = tab.key;
-            renderTabBar(); renderContent();
+            renderTabBar(); await renderContent();
         });
         bar.appendChild(btn);
     });
@@ -1182,18 +1343,18 @@ function beginRenameTab(tab, btn, labelEl) {
     input.addEventListener('dblclick', ev => ev.stopPropagation());
 
     let settled = false;
-    function commit() {
+    async function commit() {
         if (settled) return; settled = true;
         const v = input.value.trim();
         if (!v || v === tab.label) { renderTabBar(); return; }
-        const result = performRename(tab, v);
+        const result = await performRename(tab, v);
         if (!result.ok) {
             alert(result.error);
             settled = false;
             input.focus(); input.select();
             return;
         }
-        renderAll();
+        await renderAll();
     }
     function cancel() { if (settled) return; settled = true; renderTabBar(); }
 
@@ -1213,9 +1374,10 @@ function beginRenameTab(tab, btn, labelEl) {
 //  sort click, column-hide click, or tab switch — only when data actually
 //  changes, tracked via dataVersion)
 // ═══════════════════════════════════════════════════════════
-function getTabRows(tab) {
+async function getTabRows(tab) {
     if (tab._rowsCacheVersion === dataVersion && tab._rowsCache) return tab._rowsCache;
-    const rows = alasql(`SELECT * FROM [${tab.viewName}]`);
+    const result = await conn.query(`SELECT * FROM ${q(tab.viewName)}`);
+    const rows = arrowResultToRows(result);
     tab._rowsCache = rows;
     tab._rowsCacheVersion = dataVersion;
     return rows;
@@ -1232,6 +1394,62 @@ function getTabColumnInfo(tab, rows) {
     tab._colsCache = info;
     tab._colsCacheVersion = dataVersion;
     return info;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  QUICK FILTERS  — a free-text box (matches any currently-visible column)
+//  plus a per-column filter in the Columns dropdown (an exact-value picker
+//  for low-cardinality columns, a "contains" search for everything else).
+//  Both operate purely in memory over already-loaded rows — no SQL involved,
+//  and no re-query of DuckDB — so they stay snappy even on large tabs.
+// ═══════════════════════════════════════════════════════════
+function filterCellString(v) {
+    if (v == null) return '';
+    return typeof v === 'object' ? JSON.stringify(v) : String(v);
+}
+function rowMatchesQuickFilter(row, cols, query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return cols.some(c => filterCellString(row[c]).toLowerCase().includes(q));
+}
+function rowMatchesColumnFilters(row, cols, columnFilters, filterMeta) {
+    for (const c of cols) {
+        const val = columnFilters[c];
+        if (!val) continue;
+        const cellStr = filterCellString(row[c]);
+        const mode = (filterMeta[c] && filterMeta[c].mode) || 'text';
+        if (mode === 'select') { if (cellStr !== val) return false; }
+        else if (!cellStr.toLowerCase().includes(val.trim().toLowerCase())) return false;
+    }
+    return true;
+}
+// A column gets an exact-value dropdown when it has a small, fixed set of
+// distinct values (e.g. a status/category field); anything with more variety
+// than that (free text, most numbers, most dates) gets a "contains" search
+// instead, since listing every value wouldn't fit — or help — in a small panel.
+const COLUMN_FILTER_SELECT_CAP = 40;
+function getColumnFilterMeta(tab, rows, cols) {
+    if (tab._filterMetaCacheVersion === dataVersion && tab._filterMetaCache) return tab._filterMetaCache;
+    const sets = {}; const exceeded = new Set();
+    cols.forEach(c => sets[c] = new Set());
+    for (const row of rows) {
+        for (const c of cols) {
+            if (exceeded.has(c)) continue;
+            const v = row[c];
+            if (v == null || v === '') continue;
+            sets[c].add(filterCellString(v));
+            if (sets[c].size > COLUMN_FILTER_SELECT_CAP) exceeded.add(c);
+        }
+    }
+    const meta = {};
+    cols.forEach(c => {
+        meta[c] = (!exceeded.has(c) && sets[c].size >= 2)
+            ? { mode: 'select', values: [...sets[c]].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) }
+            : { mode: 'text', values: null };
+    });
+    tab._filterMetaCache = meta;
+    tab._filterMetaCacheVersion = dataVersion;
+    return meta;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1270,7 +1488,7 @@ function buildGrid(cols, entries, tab, urlColumn) {
         }</div>` + (i < cols.length - 1 ? '<div class="col-resize-handle" title="Drag to resize"></div>' : '');
         header.appendChild(cell);
     });
-    header.addEventListener('click', e => {
+    header.addEventListener('click', async e => {
         const cell = e.target.closest('.grid-hcell[data-col]');
         if (!cell) return;
         const col = cell.dataset.col;
@@ -1278,7 +1496,7 @@ function buildGrid(cols, entries, tab, urlColumn) {
         if (i === -1) tab.sorts.push({ column: col, direction: 'asc' });
         else if (tab.sorts[i].direction === 'asc') tab.sorts[i].direction = 'desc';
         else tab.sorts.splice(i, 1);
-        renderContent();
+        await renderContent();
     });
 
     // Drag-to-resize: updates just two CSS custom properties on `shell` — every header
@@ -1328,6 +1546,7 @@ function buildGrid(cols, entries, tab, urlColumn) {
     body.className = 'grid-body';
     body.setAttribute('role', 'rowgroup');
 
+    function cellText(v) { return typeof v === 'object' && v !== null ? JSON.stringify(v) : v; }
     function rowsHtml(slice) {
         let html = '';
         slice.forEach(entry => {
@@ -1335,7 +1554,7 @@ function buildGrid(cols, entries, tab, urlColumn) {
             const urlAttr = url ? ` data-url="${esc(url)}"` : '';
             const cls = clickedItems.has(entry.uid) ? ' grid-row visited' : ' grid-row';
             let cells = '';
-            cols.forEach((c, i) => { cells += `<div class="grid-cell" role="cell" style="${cellStyle(i)}">${esc(entry.row[c])}</div>`; });
+            cols.forEach((c, i) => { cells += `<div class="grid-cell" role="cell" style="${cellStyle(i)}">${esc(cellText(entry.row[c]))}</div>`; });
             html += `<div class="${cls}" role="row" data-uid="${esc(entry.uid)}"${urlAttr}>${cells}</div>`;
         });
         return html;
@@ -1377,7 +1596,9 @@ function buildGrid(cols, entries, tab, urlColumn) {
         clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
         try { localStorage.setItem('clickedItems', JSON.stringify([...clickedItems])); } catch (e) {}
         if (hideVisited && clickedItems.has(uid)) row.remove();
-        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+        // Only ever navigate to http(s) — loaded data is untrusted, so a javascript:,
+        // data:, file:, or other unexpected scheme in a "url" column must never run.
+        if (url && /^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
     });
 
     // Keep the header's right edge aligned with the body's content edge even when a
@@ -1399,8 +1620,11 @@ function buildGrid(cols, entries, tab, urlColumn) {
 
 // ═══════════════════════════════════════════════════════════
 //  EDITABLE SQL  (for view tabs) — edit the query in place and re-run it
-//  immediately; the underlying AlaSQL view is redefined so any other view
-//  built on top of it also picks up the change.
+//  immediately; the underlying DuckDB view is redefined so any other view
+//  built on top of it also picks up the change. (Kept SELECT/WITH-only:
+//  a "view" is by definition a stored query, so an inline edit here always
+//  goes through CREATE OR REPLACE VIEW — for other statement types, use
+//  the Categories box instead.)
 // ═══════════════════════════════════════════════════════════
 function renderSqlPreview(container, tab) {
     container.innerHTML = `
@@ -1432,24 +1656,22 @@ function beginEditSql(container, tab) {
     const errorEl = document.createElement('div');
     errorEl.className = 'sql-edit-error';
 
-    function doSave() {
+    async function doSave() {
         const newSql = input.value.trim().replace(/;\s*$/, '');
         if (!newSql) { errorEl.textContent = 'SQL cannot be empty.'; return; }
-        if (newSql === tab.sql) { renderContent(); return; }
+        if (newSql === tab.sql) { await renderContent(); return; }
         try {
-            const allowed = knownQueryTargets();
-            assertSafeSelect(newSql, allowed);
-            alasql(`DROP VIEW IF EXISTS [${tab.viewName}]`);
-            alasql(`CREATE VIEW [${tab.viewName}] AS ${newSql}`);
+            assertNoRemoteAccess(newSql);
+            await conn.query(`CREATE OR REPLACE VIEW ${q(tab.viewName)} AS ${newSql}`);
             tab.sql = newSql;
             tab.sourceTable = guessPrimaryTable(newSql);
             dataVersion++;
-            renderContent();
+            await renderContent();
         } catch (e) {
             errorEl.textContent = firstLine(e.message);
         }
     }
-    function doCancel() { renderContent(); }
+    async function doCancel() { await renderContent(); }
 
     input.addEventListener('keydown', ev => {
         if (ev.key === 'Enter')  { ev.preventDefault(); doSave(); }
@@ -1473,7 +1695,7 @@ function beginEditSql(container, tab) {
 //  time. Because the grid's scrollable body is created fresh here, tab
 //  switches can never "inherit" another tab's scroll position.)
 // ═══════════════════════════════════════════════════════════
-function renderContent() {
+async function renderContent() {
     const content = document.getElementById('content');
     activeObservers.forEach(o => { try { o.disconnect(); } catch (e) {} });
     activeObservers = [];
@@ -1491,7 +1713,7 @@ function renderContent() {
 
     let rows;
     try {
-        rows = getTabRows(tab);
+        rows = await getTabRows(tab);
     } catch (e) {
         document.getElementById('columnsDropdownBtn').style.display = 'none';
         closeDropdownIfOpen('columnsDropdown');
@@ -1501,15 +1723,26 @@ function renderContent() {
     document.getElementById('columnsDropdownBtn').style.display = '';
 
     const { urlColumn, allCols, cols, types } = getTabColumnInfo(tab, rows);
-    renderColManager(tab, cols);
+    const filterMeta = getColumnFilterMeta(tab, rows, cols);
+    renderColManager(tab, cols, filterMeta);
 
     const visCols = cols.filter(c => !tab.hiddenColumns.has(c));
     const sorted = sortData(rows, tab.sorts, types);
 
     const namespace = tab.sourceTable || tab.viewName;
     const withUid = sorted.map((row, idx) => ({ row, uid: rowUid(row, idx, namespace) }));
-    const visibleEntries = hideVisited ? withUid.filter(e => !clickedItems.has(e.uid)) : withUid;
-    const hiddenVisitedCount = withUid.length - visibleEntries.length;
+
+    // Column filters + the free-text quick filter both match only against
+    // currently-visible columns — a hidden column's filter is kept (so it comes
+    // back if the column is shown again) but never silently applied while hidden.
+    let entries = withUid;
+    const hasColumnFilters = visCols.some(c => tab.columnFilters[c]);
+    if (hasColumnFilters) entries = entries.filter(e => rowMatchesColumnFilters(e.row, visCols, tab.columnFilters, filterMeta));
+    if (tab.quickFilter) entries = entries.filter(e => rowMatchesQuickFilter(e.row, visCols, tab.quickFilter));
+    const filteredOutCount = withUid.length - entries.length;
+
+    const visibleEntries = hideVisited ? entries.filter(e => !clickedItems.has(e.uid)) : entries;
+    const hiddenVisitedCount = entries.length - visibleEntries.length;
 
     const toolbar = document.createElement('div');
     toolbar.className = 'tab-toolbar';
@@ -1517,16 +1750,41 @@ function renderContent() {
     let countText = totalForTable != null
         ? `${visibleEntries.length} of ${totalForTable} record${totalForTable !== 1 ? 's' : ''}`
         : `${visibleEntries.length} record${visibleEntries.length !== 1 ? 's' : ''}`;
+    if (filteredOutCount > 0) countText += ` · ${filteredOutCount} filtered out`;
     if (hideVisited && hiddenVisitedCount > 0) countText += ` · ${hiddenVisitedCount} visited hidden`;
     toolbar.innerHTML = `
         <span>${esc(tab.label)}</span>
         <span class="count">${countText}</span>
+        <span class="quick-filter-wrap">
+            <input type="text" class="quick-filter-input${tab.quickFilter ? ' filter-active' : ''}" placeholder="🔍 Filter rows…"
+                   value="${esc(tab.quickFilter || '')}" title="Matches any visible column, case-insensitive">
+            ${tab.quickFilter ? '<span class="quick-filter-clear" title="Clear filter">✕</span>' : ''}
+        </span>
         <span class="spacer"></span>
         <span class="actions">
             <button class="btn btn-outline btn-sm" data-dl="csv" title="Download the currently visible rows (all columns), in the current sort order">⬇ CSV</button>
             <button class="btn btn-outline btn-sm" data-dl="json" title="Download the currently visible rows (all columns), in the current sort order">⬇ JSON</button>
         </span>`;
     content.appendChild(toolbar);
+
+    const qfInput = toolbar.querySelector('.quick-filter-input');
+    let qfDebounce = null;
+    qfInput.addEventListener('input', () => {
+        tab.quickFilter = qfInput.value;
+        const cursor = qfInput.selectionStart;
+        clearTimeout(qfDebounce);
+        qfDebounce = setTimeout(async () => {
+            await renderContent();
+            const revived = document.querySelector('.quick-filter-input');
+            if (revived) { revived.focus(); try { revived.setSelectionRange(cursor, cursor); } catch (e) {} }
+        }, 160);
+    });
+    qfInput.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape' && qfInput.value) { ev.preventDefault(); ev.stopPropagation(); tab.quickFilter = ''; renderContent(); }
+    });
+    const qfClear = toolbar.querySelector('.quick-filter-clear');
+    if (qfClear) qfClear.addEventListener('click', async () => { tab.quickFilter = ''; await renderContent(); });
+
     const exportRows = visibleEntries.map(e => e.row);
     toolbar.querySelector('[data-dl="csv"]').addEventListener('click', () => {
         triggerDownload(rowsToCSV(exportRows, allCols), `${tab.label}.csv`, 'text/csv;charset=utf-8;');
@@ -1604,11 +1862,11 @@ document.addEventListener('keydown', e => {
     if (document.getElementById('catModalBackdrop').style.display !== 'none') { closeCategoriesModal(); return; }
     closeAllDropdowns();
 });
-document.getElementById('catModalLoadBtn').addEventListener('click', () => {
+document.getElementById('catModalLoadBtn').addEventListener('click', async () => {
     const textarea = document.getElementById('catModalTextarea');
     const text = textarea.value;
     if (!text.trim()) { closeCategoriesModal(); return; }
-    loadCategoriesFromText(text);
+    await loadCategoriesFromText(text);
     textarea.value = '';
     closeCategoriesModal();
 });
@@ -1623,53 +1881,166 @@ document.getElementById('catModalFileInput').addEventListener('change', e => {
 document.getElementById('clearCatBtn').addEventListener('click', clearCategories);
 
 // ═══════════════════════════════════════════════════════════
-//  STARTUP  — ensure AlaSQL is available (CDN, verified by SRI, with an
-//  optional same-folder local file as a fallback) before doing anything
-//  that depends on it.
+//  STARTUP  — resolve DuckDB-Wasm local-first, before doing anything else
+//  that depends on it. See the comment above the closing </body> for the
+//  full policy; short version:
+//    1. Look for a self-hosted copy under ./duckdb-wasm/. If present, use
+//       it — this makes zero network requests.
+//    2. Otherwise, show duckdbModalBackdrop and WAIT for an explicit click
+//       before fetching anything. Only ever the one pinned version below.
 // ═══════════════════════════════════════════════════════════
-function loadLocalAlaSQLFallback() {
-    return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'alasql.min.js';
-        s.onload = () => resolve(true);
-        s.onerror = () => reject(new Error('local alasql.min.js not found next to this file'));
-        document.head.appendChild(s);
+const DUCKDB_WASM_VERSION = '1.30.0';
+const LOCAL_DUCKDB_DIR   = './duckdb-wasm/';
+const LOCAL_DUCKDB_ENTRY = LOCAL_DUCKDB_DIR + 'duckdb-browser.mjs';
+// Mirrors the shape mod.getJsDelivrBundles() returns, but pointing at local
+// sibling files instead of jsDelivr — passed to the SAME mod.selectBundle()
+// so the browser-capability logic (MVP vs EH vs COI/threaded) is identical
+// either way; only where the bytes come from changes.
+const LOCAL_DUCKDB_BUNDLES = {
+    mvp: {
+        mainModule: LOCAL_DUCKDB_DIR + 'duckdb-mvp.wasm',
+        mainWorker: LOCAL_DUCKDB_DIR + 'duckdb-browser-mvp.worker.js',
+    },
+    eh: {
+        mainModule: LOCAL_DUCKDB_DIR + 'duckdb-eh.wasm',
+        mainWorker: LOCAL_DUCKDB_DIR + 'duckdb-browser-eh.worker.js',
+    },
+    coi: {
+        mainModule: LOCAL_DUCKDB_DIR + 'duckdb-coi.wasm',
+        mainWorker: LOCAL_DUCKDB_DIR + 'duckdb-browser-coi.worker.js',
+        pthreadWorker: LOCAL_DUCKDB_DIR + 'duckdb-browser-coi.pthread.worker.js',
+    },
+};
+
+// Looks for a self-hosted copy next to this file. Resolves to the loaded
+// module, or null if it's simply not there. A local install that IS present
+// but broken (found the entry file, failed to import it) is reported via
+// `broken: true` rather than treated as "not there", so ensureDuckDB() can
+// still ask before silently falling back to the network.
+async function tryLoadLocalDuckDB() {
+    let head;
+    try {
+        head = await fetch(LOCAL_DUCKDB_ENTRY, { method: 'HEAD' });
+    } catch (e) {
+        return { mod: null, broken: false }; // e.g. file:// blocking fetch entirely — treat as "not there"
+    }
+    if (!head.ok) return { mod: null, broken: false };
+    try {
+        const mod = await import(/* webpackIgnore: true */ LOCAL_DUCKDB_ENTRY);
+        return { mod, broken: false };
+    } catch (e) {
+        console.error('Found ./duckdb-wasm/duckdb-browser.mjs but failed to load it:', e);
+        return { mod: null, broken: true };
+    }
+}
+
+async function instantiateFromBundle(mod, bundle) {
+    const workerUrl = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+    );
+    const worker = new Worker(workerUrl);
+    const logger = new mod.ConsoleLogger();
+    db = new mod.AsyncDuckDB(logger, worker);
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    URL.revokeObjectURL(workerUrl);
+    conn = await db.connect();
+}
+
+// Blocks until the person clicks a button on duckdbModalBackdrop. Resolves
+// true for "Download & Continue", false for "Cancel". No network request of
+// any kind happens before this resolves true.
+function askBeforeDownloadingFromCDN(localWasBroken) {
+    return new Promise(resolve => {
+        document.querySelectorAll('.duckdb-version-inline').forEach(el => el.textContent = DUCKDB_WASM_VERSION);
+        document.getElementById('duckdbModalVersion').textContent = DUCKDB_WASM_VERSION;
+        document.getElementById('duckdbModalReason').textContent = localWasBroken
+            ? `A local copy under ./duckdb-wasm/ was found but failed to load correctly (see the browser console for details).`
+            : `No local copy of DuckDB-Wasm (the SQL engine this page runs on) was found under ./duckdb-wasm/, next to this HTML file.`;
+        const backdrop = document.getElementById('duckdbModalBackdrop');
+        const cancelBtn = document.getElementById('duckdbModalCancelBtn');
+        const continueBtn = document.getElementById('duckdbModalContinueBtn');
+        function cleanup(result) {
+            backdrop.style.display = 'none';
+            cancelBtn.removeEventListener('click', onCancel);
+            continueBtn.removeEventListener('click', onContinue);
+            document.removeEventListener('keydown', onKeydown);
+            resolve(result);
+        }
+        function onCancel()   { cleanup(false); }
+        function onContinue() { cleanup(true); }
+        function onKeydown(ev) { if (ev.key === 'Escape') { ev.preventDefault(); cleanup(false); } }
+        cancelBtn.addEventListener('click', onCancel);
+        continueBtn.addEventListener('click', onContinue);
+        document.addEventListener('keydown', onKeydown);
+        backdrop.style.display = 'flex';
     });
 }
-async function ensureAlaSQL() {
-    if (typeof alasql !== 'undefined') return true;
-    if (window.__alasqlCdnFailed) {
-        try { await loadLocalAlaSQLFallback(); } catch (e) { /* no local copy available either */ }
+
+// Returns true (ready), false (a real load error, local or CDN), or the
+// string 'declined' (the person clicked Cancel on the consent modal — not
+// an error, just a choice, and handled with different messaging below).
+async function ensureDuckDB() {
+    const local = await tryLoadLocalDuckDB();
+    if (local.mod) {
+        try {
+            const bundle = await local.mod.selectBundle(LOCAL_DUCKDB_BUNDLES);
+            await instantiateFromBundle(local.mod, bundle);
+            return true;
+        } catch (e) {
+            console.error('Local DuckDB-Wasm under ./duckdb-wasm/ was found but failed to instantiate:', e);
+            local.broken = true; // fall through to asking about the CDN, below
+        }
     }
-    return typeof alasql !== 'undefined';
+    const proceed = await askBeforeDownloadingFromCDN(local.broken);
+    if (!proceed) return 'declined';
+    try {
+        const mod = await import(/* webpackIgnore: true */ `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_WASM_VERSION}/+esm`);
+        const bundle = await mod.selectBundle(mod.getJsDelivrBundles());
+        await instantiateFromBundle(mod, bundle);
+        return true;
+    } catch (e) {
+        console.error('DuckDB-Wasm failed to load from CDN:', e);
+        return false;
+    }
 }
-function showFatalAlaSQLError() {
+function showFatalDuckDBError() {
     document.body.innerHTML = `
         <div style="max-width:640px;margin:60px auto;padding:28px 32px;background:#181c27;color:#f75f5f;
                     border:1px solid #f75f5f;border-radius:10px;font-family:'DM Sans',sans-serif;line-height:1.7;">
-            <h2 style="margin-bottom:10px;">⚠ Could not load the SQL engine (AlaSQL)</h2>
-            <p>This page loads AlaSQL from a trusted CDN (<code>cdn.jsdelivr.net</code>), pinned to an exact
-               version and verified with Subresource Integrity — so no local copy is normally required.</p>
-            <p style="margin-top:8px;">That request failed, most likely because this network/browser blocks
-               <code>cdn.jsdelivr.net</code>, or you're offline. To fix it:</p>
+            <h2 style="margin-bottom:10px;">⚠ Could not load the SQL engine (DuckDB-Wasm)</h2>
+            <p>Neither a local copy under <code>./duckdb-wasm/</code> nor the CDN download
+               (<code>cdn.jsdelivr.net</code>, pinned to exactly <code>${DUCKDB_WASM_VERSION}</code>) could be
+               loaded. Most likely this network/browser blocks <code>cdn.jsdelivr.net</code>, you're offline, or
+               your browser doesn't support WebAssembly / Web Workers. To fix it:</p>
             <ul style="margin:10px 0 10px 20px;">
                 <li>Check your internet connection, or allow <code>cdn.jsdelivr.net</code> in your network/firewall settings, then reload; or</li>
-                <li>Download <code>alasql.min.js</code> (e.g. from
-                    <a href="https://www.jsdelivr.com/package/npm/alasql" target="_blank" rel="noopener noreferrer" style="color:#4f8ef7;">jsDelivr</a>
-                    or <a href="https://www.npmjs.com/package/alasql" target="_blank" rel="noopener noreferrer" style="color:#4f8ef7;">npm</a>,
-                    the <code>dist/alasql.min.js</code> file) and save it in the <strong>same folder</strong> as this
-                    HTML file, named exactly <code>alasql.min.js</code>, then reload this page — it will be picked up
-                    automatically as a fallback.</li>
+                <li>Set up a local copy under <code>duckdb-wasm/</code> (see the in-page prompt for exactly which files) to avoid the network entirely; or</li>
+                <li>Try a recent version of Chrome, Firefox, Safari, or Edge.</li>
             </ul>
         </div>`;
 }
+function showDuckDBDeclinedScreen() {
+    document.body.innerHTML = `
+        <div style="max-width:640px;margin:60px auto;padding:28px 32px;background:#181c27;color:#d4d8e8;
+                    border:1px solid #2a2f45;border-radius:10px;font-family:'DM Sans',sans-serif;line-height:1.7;">
+            <h2 style="margin-bottom:10px;color:#f7c94f;">SQL engine not loaded</h2>
+            <p>You chose not to download DuckDB-Wasm from <code>cdn.jsdelivr.net</code>, so this page hasn't loaded
+               its SQL engine yet and can't open any data.</p>
+            <p style="margin-top:8px;">To run with zero network requests: download
+               <code>@duckdb/duckdb-wasm@${DUCKDB_WASM_VERSION}</code> (e.g. <code>npm pack
+               @duckdb/duckdb-wasm@${DUCKDB_WASM_VERSION}</code>), copy its <code>dist/</code> files into a
+               <code>duckdb-wasm/</code> folder next to this HTML file, and reload — this page will find and use
+               them automatically.</p>
+            <p style="margin-top:14px;"><button class="btn btn-primary" onclick="location.reload()">↻ Reload page</button></p>
+        </div>`;
+}
 (async function start() {
-    const ready = await ensureAlaSQL();
-    if (!ready) { showFatalAlaSQLError(); return; }
-    alasql.options.casesensitive = true;
+    const ready = await ensureDuckDB();
+    if (ready === 'declined') { showDuckDBDeclinedScreen(); return; }
+    if (!ready) { showFatalDuckDBError(); return; }
     document.getElementById('loadFolderBtn').disabled = false;
     document.getElementById('dataFileInput').disabled = false;
-    renderAll();
+    await renderAll();
 })();
 </script>
 </body>
