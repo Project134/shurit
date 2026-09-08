@@ -82,6 +82,8 @@
     }
     .brand { font-family:var(--mono); font-size:13px; font-weight:500; color:var(--accent); letter-spacing:.05em; margin-right:4px; cursor:default; }
     #dataSummary { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 8px; background:var(--bg); border-radius:4px; border:1px solid var(--border); display:none; }
+    .visit-sync-status { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:2px 8px; background:var(--bg); border-radius:4px; border:1px solid var(--border); cursor:default; }
+    .visit-sync-status.has-unsynced { color:var(--accent); border-color:var(--accent); }
 
     /* ── Buttons ─────────────────────────────────────────────── */
     .btn { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:5px; border:1px solid transparent; font-family:var(--sans); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; white-space:nowrap; background:none; color:var(--text); }
@@ -261,6 +263,11 @@
     </button>
     <button class="btn btn-danger" id="clearCatBtn" style="display:none">✕ Clear Categories</button>
     <button class="btn btn-outline" id="hideVisitedBtn" style="display:none">🙈 Hide Visited</button>
+    <button class="btn btn-outline" id="syncVisitsBtn" style="display:none"
+            title="Save visited marks to visit_log.json in the loaded folder (or download it, if this data wasn't loaded via &quot;Load Folder&quot;) — keyed by a hash of each table's schema, not its name, so it survives reloads and renames, and a click in a view updates the table it's built on (and any other view built on that same table).">
+        💾 Sync Visits
+    </button>
+    <span id="visitSyncStatus" class="visit-sync-status" style="display:none"></span>
     <button id="themeToggle" title="Toggle theme">🌙</button>
 </div>
 
@@ -455,7 +462,8 @@ let dataVersion    = 0;    // bumped whenever any table/view's underlying data c
 // by exactly the name shown on its tab. Each tab: { key, kind:'table'|'view', label,
 // viewName, sourceTable, raw, sql, hiddenColumns:Set, sorts:[], colWidths:{},
 // quickFilter:'', columnFilters:{}, _rowsCache, _rowsCacheVersion, _colsCache,
-// _colsCacheVersion, _filterMetaCache, _filterMetaCacheVersion }
+// _colsCacheVersion, _filterMetaCache, _filterMetaCacheVersion, _schemaHashCache,
+// _schemaHashCacheVersion }
 let tabs           = [];
 let activeTabKey   = null;
 let categoryErrors = [];
@@ -468,6 +476,15 @@ function safeLoadClickedItems() {
     try { return JSON.parse(localStorage.getItem('clickedItems') || '[]'); }
     catch (e) { return []; }
 }
+// Set only when data was loaded via "📁 Load Folder" in a browser that supports
+// the File System Access API — lets "Sync Visits" write visit_log.json straight
+// back into that folder instead of downloading it. Sticky across later "Add
+// Files" calls; replaced only by picking another folder.
+let currentDirHandle = null;
+// hash -> Set<string id>, the last-known contents of visit_log.json (from the
+// initial load, or updated after each successful sync) — diffed against what's
+// currently clicked to show the "N unsynced" counts next to the Sync Visits button.
+let lastSyncedVisits = {};
 
 // DuckDB-Wasm handles — set once by ensureDuckDB() at startup.
 let db   = null;   // AsyncDuckDB instance
@@ -593,9 +610,26 @@ function sortData(data, sorts, types) {
 // ═══════════════════════════════════════════════════════════
 //  ROW IDENTITY  (used for the "visited" highlight + hide-visited filter)
 // ═══════════════════════════════════════════════════════════
+function rowHasStableId(row) {
+    return !!(row && row['id'] !== undefined && row['id'] !== null && row['id'] !== '');
+}
 function rowUid(row, idx, namespace) {
-    const hasId = row['id'] !== undefined && row['id'] !== null && row['id'] !== '';
-    return hasId ? `${namespace}_${row['id']}` : `${namespace}_r${idx}`;
+    // "@r<idx>" (rather than a bare "r<idx>") marks a positional fallback uid as
+    // clearly not a real id — parseVisitUid below relies on that to know which
+    // uids are safe to persist across reloads (see VISIT SYNC) and which aren't.
+    return rowHasStableId(row) ? `${namespace}_${row['id']}` : `${namespace}_@r${idx}`;
+}
+// Splits a uid back into { hash, id, stable }. Safe because namespace is always
+// a 16-hex-char schema hash (never contains "_"), so the FIRST underscore is
+// always the boundary — everything after it is the original id, underscores
+// and all. `stable` is false for positional fallback uids ("@r<idx>"), which
+// are only ever meaningful within one already-loaded session and are never
+// written to visit_log.json.
+function parseVisitUid(uid) {
+    const i = uid.indexOf('_');
+    if (i < 0) return null;
+    const hash = uid.slice(0, i), rest = uid.slice(i + 1);
+    return rest.startsWith('@r') ? { hash, id: null, stable: false } : { hash, id: rest, stable: true };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -766,6 +800,7 @@ function invalidateTabCache(tab) {
     tab._rowsCache = null; tab._rowsCacheVersion = -1;
     tab._colsCache = null; tab._colsCacheVersion = -1;
     tab._filterMetaCache = null; tab._filterMetaCacheVersion = -1;
+    tab._schemaHashCache = null; tab._schemaHashCacheVersion = -1;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -791,6 +826,41 @@ function columnSignature(data) {
     }
     return [...keys].sort().join('\u0001');
 }
+// ═══════════════════════════════════════════════════════════
+//  SCHEMA HASH  — identifies "this shape of data" independent of whatever a
+//  table or view happens to be named right now. Used to key visited-row
+//  state (see VISIT SYNC below) so that renaming a table, or clicking a row
+//  from a SQL view built on that table, doesn't create a second, disconnected
+//  set of visited marks. Non-cryptographic on purpose: this only needs to be
+//  a stable, synchronous, collision-resistant-enough content key, not secure.
+// ═══════════════════════════════════════════════════════════
+function hashSchemaSignature(sig) {
+    let h1 = 0x811c9dc5, h2 = 0x9e3779b9; // two independent FNV/xor-mix passes → 16 hex chars
+    for (let i = 0; i < sig.length; i++) {
+        const c = sig.charCodeAt(i);
+        h1 ^= c; h1 = Math.imul(h1, 0x01000193);
+        h2 = Math.imul(h2 ^ c, 0x85ebca6b); h2 ^= h2 >>> 13;
+    }
+    return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
+}
+function tableSchemaHash(rows) { return hashSchemaSignature(columnSignature(rows)); }
+// Resolves the schema hash a tab's visited-marks should be filed under: a
+// table tab's own hash, or — for a view — the hash of the table it's primarily
+// built on (tab.sourceTable, from guessPrimaryTable) so a view and its source
+// table always agree on the same hash. Falls back to hashing the tab's own
+// current result columns for anything that can't be resolved that way (a view
+// built on another view, a multi-table join, or a since-removed source table)
+// — visited-marking and syncing still work in that case, they just won't
+// automatically line up with a different tab.
+function getSchemaHashForTab(tab, rows) {
+    if (tab.sourceTable && loadedTables[tab.sourceTable]) return loadedTables[tab.sourceTable].schemaHash;
+    if (tab._schemaHashCacheVersion === dataVersion && tab._schemaHashCache) return tab._schemaHashCache;
+    const hash = tableSchemaHash(rows);
+    tab._schemaHashCache = hash;
+    tab._schemaHashCacheVersion = dataVersion;
+    return hash;
+}
+
 // Merge rows from files with an identical column signature. If the schema includes an
 // "id" field, later files (alphabetically) win on a given id. Either way, every output
 // row is tagged with "json_source": the originating file, or — for an id that appeared
@@ -835,7 +905,7 @@ async function loadJsonTable(json, rawName, sourceFiles) {
 
     const urlColumn = detectUrlColumn(json);
     const allKeys = unionKeys(json);
-    loadedTables[name] = { rawName, allKeys, rowCount: json.length, urlColumn, sourceFiles: sourceFiles || [rawName] };
+    loadedTables[name] = { rawName, allKeys, rowCount: json.length, urlColumn, sourceFiles: sourceFiles || [rawName], schemaHash: tableSchemaHash(json) };
     if (!tableOrder.includes(name)) tableOrder.push(name);
 
     let tab = tabs.find(t => t.key === name);
@@ -846,7 +916,7 @@ async function loadJsonTable(json, rawName, sourceFiles) {
             hiddenColumns: new Set(), sorts: [], colWidths: {},
             quickFilter: '', columnFilters: {},
             _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
-            _filterMetaCache: null, _filterMetaCacheVersion: -1
+            _filterMetaCache: null, _filterMetaCacheVersion: -1, _schemaHashCache: null, _schemaHashCacheVersion: -1
         };
         tabs.push(tab);
     }
@@ -1030,7 +1100,7 @@ async function loadCategoriesFromText(text) {
                         hiddenColumns: new Set(), sorts: [], colWidths: {},
                         quickFilter: '', columnFilters: {},
                         _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
-                        _filterMetaCache: null, _filterMetaCacheVersion: -1
+                        _filterMetaCache: null, _filterMetaCacheVersion: -1, _schemaHashCache: null, _schemaHashCacheVersion: -1
                     };
                     tabs.push(tab);
                     touchedTabs.push(tab);
@@ -1103,12 +1173,141 @@ function triggerDownload(content, filename, mime) {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  VISIT SYNC  — persists visited-row marks to visit_log.json in the loaded
+//  folder (or downloads it, if there's no writable folder handle), keyed by
+//  schema hash rather than table/view name so it survives renames and stays
+//  in sync between a table and any view built on it. See getSchemaHashForTab
+//  and parseVisitUid above for how that linkage actually works; this section
+//  is just the file I/O and the "N unsynced" bookkeeping around it.
+// ═══════════════════════════════════════════════════════════
+function persistClickedItems() {
+    try { localStorage.setItem('clickedItems', JSON.stringify([...clickedItems])); } catch (e) {}
+}
+function buildVisitLogPayload() {
+    const visits = {};
+    for (const uid of clickedItems) {
+        const parsed = parseVisitUid(uid);
+        if (!parsed || !parsed.stable) continue; // positional-only marks aren't portable across reloads
+        (visits[parsed.hash] || (visits[parsed.hash] = [])).push(parsed.id);
+    }
+    Object.values(visits).forEach(list => list.sort());
+    return { version: 1, savedAt: new Date().toISOString(), visits };
+}
+function restoreVisitsFromLog(data) {
+    const visits = (data && typeof data === 'object' && data.visits && typeof data.visits === 'object') ? data.visits : null;
+    if (!visits) return;
+    lastSyncedVisits = {};
+    Object.entries(visits).forEach(([hash, ids]) => {
+        if (!Array.isArray(ids)) return;
+        lastSyncedVisits[hash] = new Set(ids.map(String));
+        ids.forEach(id => clickedItems.add(`${hash}_${id}`));
+    });
+    persistClickedItems();
+}
+// Groups every currently-clicked, id-based uid by schema hash, so the status
+// readout and the write path don't each re-derive this independently.
+function groupClickedByHash() {
+    const byHash = {};
+    for (const uid of clickedItems) {
+        const parsed = parseVisitUid(uid);
+        if (!parsed || !parsed.stable) continue;
+        (byHash[parsed.hash] || (byHash[parsed.hash] = new Set())).add(parsed.id);
+    }
+    return byHash;
+}
+// "Unsynced" = symmetric difference against the last-known saved file: new
+// clicks not yet saved, AND previously-saved ids since un-clicked — either way,
+// the file on disk doesn't match the current state until a sync writes it.
+function computeUnsyncedCounts() {
+    const current = groupClickedByHash();
+    const hashes = new Set([...Object.keys(current), ...Object.keys(lastSyncedVisits)]);
+    const result = {};
+    hashes.forEach(hash => {
+        const cur = current[hash] || new Set(), saved = lastSyncedVisits[hash] || new Set();
+        let diff = 0;
+        cur.forEach(id => { if (!saved.has(id)) diff++; });
+        saved.forEach(id => { if (!cur.has(id)) diff++; });
+        if (diff > 0) result[hash] = diff;
+    });
+    return result;
+}
+function renderVisitSyncStatus() {
+    const el = document.getElementById('visitSyncStatus');
+    if (!el) return;
+    if (!tableOrder.length) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    const unsynced = computeUnsyncedCounts();
+    const hashes = Object.keys(unsynced);
+    if (!hashes.length) {
+        el.className = 'visit-sync-status';
+        el.textContent = '✓ visits synced';
+        el.title = 'visit_log.json (or the last download) matches every visited mark in this session.';
+    } else {
+        el.className = 'visit-sync-status has-unsynced';
+        el.textContent = hashes.map(h => `${h.slice(0, 8)} (${unsynced[h]})`).join('  ·  ');
+        el.title = 'Schema hash → visited records not yet saved to visit_log.json:\n'
+            + hashes.map(h => `${h} — ${unsynced[h]} unsynced`).join('\n');
+    }
+}
+async function writeVisitLogToFolder(dirHandle, payload) {
+    const fileHandle = await dirHandle.getFileHandle('visit_log.json', { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(payload, null, 2));
+    await writable.close();
+}
+async function syncVisits() {
+    const payload = buildVisitLogPayload();
+    if (currentDirHandle) {
+        try {
+            if ((await currentDirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+                if ((await currentDirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+                    alert('Write access to the loaded folder was not granted, so visit_log.json will be downloaded instead — save it into that folder to replace the old copy.');
+                    triggerDownload(JSON.stringify(payload, null, 2), 'visit_log.json', 'application/json;charset=utf-8;');
+                    return;
+                }
+            }
+            await writeVisitLogToFolder(currentDirHandle, payload);
+        } catch (e) {
+            console.error('Could not write visit_log.json to the loaded folder:', e);
+            alert('Could not save visit_log.json to the loaded folder (' + e.message + ') — downloading it instead.');
+            triggerDownload(JSON.stringify(payload, null, 2), 'visit_log.json', 'application/json;charset=utf-8;');
+        }
+    } else {
+        // No folder handle (data was loaded via "Add Files", or this browser lacks
+        // the File System Access API) — download it for the person to place by hand.
+        triggerDownload(JSON.stringify(payload, null, 2), 'visit_log.json', 'application/json;charset=utf-8;');
+    }
+    lastSyncedVisits = {};
+    Object.entries(payload.visits).forEach(([hash, ids]) => { lastSyncedVisits[hash] = new Set(ids.map(String)); });
+    renderVisitSyncStatus();
+}
+// Pulls a visit_log.json entry out of a batch of {name, file} entries (name
+// already has its extension stripped, same convention collectJsonFilesFromHandle
+// and the file-input handlers all use) before they're treated as data tables,
+// and restores from it if found. Mutates and returns `entries`.
+async function extractAndRestoreVisitLog(entries) {
+    const matches = entries.filter(e => e.name.toLowerCase() === 'visit_log');
+    if (!matches.length) return entries;
+    const remaining = entries.filter(e => e.name.toLowerCase() !== 'visit_log');
+    try {
+        const text = await matches[0].file.text();
+        restoreVisitsFromLog(JSON.parse(text));
+    } catch (e) {
+        console.error('Found visit_log.json but could not read/parse it:', e);
+        alert('Found visit_log.json but could not read it (' + e.message + ') — visited marks were not restored from it.');
+    }
+    return remaining;
+}
+
+// ═══════════════════════════════════════════════════════════
 //  MASTER RENDER
 // ═══════════════════════════════════════════════════════════
 async function renderAll() {
     document.getElementById('catFileBtn').style.display     = tableOrder.length ? '' : 'none';
     document.getElementById('clearCatBtn').style.display    = tabs.some(t => t.kind === 'view') ? '' : 'none';
     document.getElementById('hideVisitedBtn').style.display = tableOrder.length ? '' : 'none';
+    document.getElementById('syncVisitsBtn').style.display  = tableOrder.length ? '' : 'none';
+    renderVisitSyncStatus();
 
     const ds = document.getElementById('dataSummary');
     if (tableOrder.length) {
@@ -1260,6 +1459,11 @@ document.getElementById('hideVisitedBtn').addEventListener('click', async () => 
     await renderContent();
 });
 updateHideVisitedBtn();
+document.getElementById('syncVisitsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('syncVisitsBtn');
+    btn.disabled = true;
+    try { await syncVisits(); } finally { btn.disabled = false; }
+});
 
 // ═══════════════════════════════════════════════════════════
 //  CATEGORY ERROR / WARNING BANNER + "no views yet" HINT
@@ -1594,7 +1798,8 @@ function buildGrid(cols, entries, tab, urlColumn) {
         const uid = row.dataset.uid, url = row.dataset.url;
         row.classList.toggle('visited');
         clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
-        try { localStorage.setItem('clickedItems', JSON.stringify([...clickedItems])); } catch (e) {}
+        persistClickedItems();
+        renderVisitSyncStatus();
         if (hideVisited && clickedItems.has(uid)) row.remove();
         // Only ever navigate to http(s) — loaded data is untrusted, so a javascript:,
         // data:, file:, or other unexpected scheme in a "url" column must never run.
@@ -1729,7 +1934,10 @@ async function renderContent() {
     const visCols = cols.filter(c => !tab.hiddenColumns.has(c));
     const sorted = sortData(rows, tab.sorts, types);
 
-    const namespace = tab.sourceTable || tab.viewName;
+    // A schema hash (not the tab's own name) is the uid namespace: this is what
+    // makes a click in a view mark the same row as visited in its source table
+    // (and any other view built on that table) — see getSchemaHashForTab above.
+    const namespace = getSchemaHashForTab(tab, rows);
     const withUid = sorted.map((row, idx) => ({ row, uid: rowUid(row, idx, namespace) }));
 
     // Column filters + the free-text quick filter both match only against
@@ -1809,12 +2017,18 @@ async function renderContent() {
 document.getElementById('loadFolderBtn').addEventListener('click', async () => {
     if (window.showDirectoryPicker && window.isSecureContext) {
         let dirHandle;
-        try { dirHandle = await window.showDirectoryPicker(); }
+        // Asked up front (rather than later, on the first "Sync Visits" click) so
+        // there's one predictable permission prompt at the point where it's obvious
+        // why this page wants folder access, not a surprise one deeper in.
+        try { dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); }
         catch (e) { if (e && e.name !== 'AbortError') alert('Could not open that folder: ' + e.message); return; }
         setFolderLoadingState(true);
         try {
-            const entries = await collectJsonFilesFromHandle(dirHandle);
+            let entries = await collectJsonFilesFromHandle(dirHandle);
             if (!entries.length) { alert('No .json files found in that folder.'); return; }
+            currentDirHandle = dirHandle;
+            entries = await extractAndRestoreVisitLog(entries);
+            if (!entries.length) { alert('Found visit_log.json, but no other .json (data) files in that folder.'); return; }
             await handleLoadedFiles(entries);
         } catch (e) {
             alert('Could not read that folder: ' + e.message);
@@ -1829,15 +2043,28 @@ document.getElementById('folderFallbackInput').addEventListener('change', async 
     const files = Array.from(e.target.files || []).filter(f => /\.json$/i.test(f.name));
     e.target.value = '';
     if (!files.length) { alert('No .json files found in that folder.'); return; }
+    // This fallback path (older browsers without showDirectoryPicker) never has a
+    // writable handle, and a fresh pick here supersedes whatever folder, if any,
+    // an earlier Load Folder call had — Sync Visits will download instead.
+    currentDirHandle = null;
     setFolderLoadingState(true);
-    try { await handleLoadedFiles(files.map(f => ({ name: f.name.replace(/\.[^.]+$/, ''), file: f }))); }
-    finally { setFolderLoadingState(false); }
+    try {
+        let entries = await extractAndRestoreVisitLog(files.map(f => ({ name: f.name.replace(/\.[^.]+$/, ''), file: f })));
+        if (!entries.length) { alert('Found visit_log.json, but no other .json (data) files in that folder.'); return; }
+        await handleLoadedFiles(entries);
+    } finally {
+        setFolderLoadingState(false);
+    }
 });
 document.getElementById('dataFileInput').addEventListener('change', async e => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (!files.length) return;
-    await handleLoadedFiles(files.map(f => ({ name: f.name.replace(/\.[^.]+$/, ''), file: f })));
+    // currentDirHandle is deliberately left as-is here — individually-picked files
+    // are treated as additions to whatever folder (if any) is already loaded.
+    let entries = await extractAndRestoreVisitLog(files.map(f => ({ name: f.name.replace(/\.[^.]+$/, ''), file: f })));
+    if (!entries.length) return; // the only file picked was visit_log.json — already restored from, nothing left to load
+    await handleLoadedFiles(entries);
 });
 
 // ── Categories (SQL views) modal ────────────────────────────
