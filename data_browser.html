@@ -221,6 +221,9 @@
     .grid-row.visited:hover { background:var(--visited-hover); }
     .grid-cell { box-sizing:border-box; padding:5px 8px; border-right:1px solid var(--border); white-space:normal; word-break:break-word; overflow-wrap:break-word; color:var(--text); line-height:1.5; }
     .grid-cell:last-child { border-right:none; }
+    .grid-row.kbd-focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .grid-cell.url-cell { color:var(--accent); text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .1s; }
+    .grid-cell.url-cell:hover { text-decoration-color:var(--accent); }
     .grid-sentinel { text-align:center; padding:9px; color:var(--text-dim); font-size:11px; }
     .grid-empty { text-align:center; padding:16px; color:var(--text-dim); }
 
@@ -264,7 +267,7 @@
     <button class="btn btn-danger" id="clearCatBtn" style="display:none">✕ Clear Categories</button>
     <button class="btn btn-outline" id="hideVisitedBtn" style="display:none">🙈 Hide Visited</button>
     <button class="btn btn-outline" id="syncVisitsBtn" style="display:none"
-            title="Save visited marks to visit_log.json in the loaded folder (or download it, if this data wasn't loaded via &quot;Load Folder&quot;) — keyed by a hash of each table's schema, not its name, so it survives reloads and renames, and a click in a view updates the table it's built on (and any other view built on that same table).">
+            title="Save visited row ids to visit_log.json in the loaded folder (or download it, if this data wasn't loaded via &quot;Load Folder&quot;) — just a flat list of ids, shared by every table and view that has an 'id' column, so a click anywhere updates every other place that same id shows up. Rows with no 'id' column can't be tracked this way.">
         💾 Sync Visits
     </button>
     <span id="visitSyncStatus" class="visit-sync-status" style="display:none"></span>
@@ -451,7 +454,7 @@ Ranked - select *, row_number() over (partition by category order by amount desc
 // ═══════════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════════
-// loadedTables: sanitizedTableName -> { rawName, allKeys:[...], rowCount, urlColumn, sourceFiles:[...] }
+// loadedTables: sanitizedTableName -> { rawName, allKeys:[...], rowCount, urlColumns:[...], sourceFiles:[...] }
 let loadedTables   = {};
 let tableOrder     = [];   // insertion order of sanitized table names
 let dataVersion    = 0;    // bumped whenever any table/view's underlying data changes — invalidates per-tab caches
@@ -462,14 +465,18 @@ let dataVersion    = 0;    // bumped whenever any table/view's underlying data c
 // by exactly the name shown on its tab. Each tab: { key, kind:'table'|'view', label,
 // viewName, sourceTable, raw, sql, hiddenColumns:Set, sorts:[], colWidths:{},
 // quickFilter:'', columnFilters:{}, _rowsCache, _rowsCacheVersion, _colsCache,
-// _colsCacheVersion, _filterMetaCache, _filterMetaCacheVersion, _schemaHashCache,
-// _schemaHashCacheVersion }
+// _colsCacheVersion, _filterMetaCache, _filterMetaCacheVersion }
 let tabs           = [];
 let activeTabKey   = null;
 let categoryErrors = [];
 let hideVisited    = false;
 let openDropdownId = null;         // 'tablesDropdown' | 'columnsDropdown' | null
 let activeObservers = [];          // IntersectionObserver/ResizeObserver tied to the current #content render
+// Reassigned by buildGrid on every render (never appended to) — lets the single,
+// permanently-attached arrow-key listener further down act on whatever grid is
+// currently shown without ever leaking an extra document-level listener per render.
+let activeGridNav = null;
+let keyboardFocusIndex = -1;       // index into activeGridNav.entries; -1 = nothing focused yet
 
 let clickedItems   = new Set(safeLoadClickedItems());
 function safeLoadClickedItems() {
@@ -481,10 +488,12 @@ function safeLoadClickedItems() {
 // back into that folder instead of downloading it. Sticky across later "Add
 // Files" calls; replaced only by picking another folder.
 let currentDirHandle = null;
-// hash -> Set<string id>, the last-known contents of visit_log.json (from the
-// initial load, or updated after each successful sync) — diffed against what's
-// currently clicked to show the "N unsynced" counts next to the Sync Visits button.
-let lastSyncedVisits = {};
+// Set<string id> — the last-known contents of visit_log.json (from the initial
+// load, or updated after each successful sync) — diffed against clickedItems to
+// show the "N unsynced" count next to the Sync Visits button. Deliberately flat:
+// visit_log.json is just a list of visited ids, shared by every table/view that
+// has an 'id' column — see rowVisitId below.
+let lastSyncedVisits = new Set();
 
 // DuckDB-Wasm handles — set once by ensureDuckDB() at startup.
 let db   = null;   // AsyncDuckDB instance
@@ -608,28 +617,19 @@ function sortData(data, sorts, types) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  ROW IDENTITY  (used for the "visited" highlight + hide-visited filter)
+//  ROW IDENTITY  (used for the "visited" highlight, hide-visited filter, and
+//  keyboard traversal — see VISIT SYNC further down for how it's persisted)
+//  Deliberately global and un-namespaced: visiting a row with id "123" marks
+//  that same id visited everywhere — in its own table, in any view built on
+//  it, and in any OTHER table/view that happens to also use id "123". A row
+//  with no 'id' field at all has no visit identity — it can never be marked
+//  visited, by click or by keyboard, and is invisible to visit_log.json.
 // ═══════════════════════════════════════════════════════════
 function rowHasStableId(row) {
     return !!(row && row['id'] !== undefined && row['id'] !== null && row['id'] !== '');
 }
-function rowUid(row, idx, namespace) {
-    // "@r<idx>" (rather than a bare "r<idx>") marks a positional fallback uid as
-    // clearly not a real id — parseVisitUid below relies on that to know which
-    // uids are safe to persist across reloads (see VISIT SYNC) and which aren't.
-    return rowHasStableId(row) ? `${namespace}_${row['id']}` : `${namespace}_@r${idx}`;
-}
-// Splits a uid back into { hash, id, stable }. Safe because namespace is always
-// a 16-hex-char schema hash (never contains "_"), so the FIRST underscore is
-// always the boundary — everything after it is the original id, underscores
-// and all. `stable` is false for positional fallback uids ("@r<idx>"), which
-// are only ever meaningful within one already-loaded session and are never
-// written to visit_log.json.
-function parseVisitUid(uid) {
-    const i = uid.indexOf('_');
-    if (i < 0) return null;
-    const hash = uid.slice(0, i), rest = uid.slice(i + 1);
-    return rest.startsWith('@r') ? { hash, id: null, stable: false } : { hash, id: rest, stable: true };
+function rowVisitId(row) {
+    return rowHasStableId(row) ? String(row['id']) : null;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -661,14 +661,30 @@ function resolveColumnWidths(tab, cols, data) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  URL COLUMN DETECTION
+//  URL COLUMN DETECTION — value-based, not name-based: any column whose
+//  values actually look like URLs is treated as one, so a record with several
+//  link-like fields (job_url, company_website, apply_link, ...) gets ALL of
+//  them clickable, not just whichever one a name-matching heuristic would
+//  have picked as "the" url column.
 // ═══════════════════════════════════════════════════════════
-function detectUrlColumn(data) {
-    if (!data.length) return 'url';
-    const first=data[0];
-    for (const n of ['url','job_url','link','href']) if(n in first) return n;
-    for (const k of Object.keys(first)) if(String(first[k]||'').startsWith('http')) return k;
-    return 'url';
+function detectUrlColumns(data) {
+    const result = new Set();
+    if (!data.length) return result;
+    const cols = unionKeys(data);
+    const sampleSize = Math.min(data.length, 60); // same sampling scale as detectType
+    cols.forEach(c => {
+        let checked = 0, matched = 0;
+        for (let i = 0; i < data.length && checked < sampleSize; i++) {
+            const v = data[i] ? data[i][c] : undefined;
+            if (v == null || v === '') continue;
+            checked++;
+            if (typeof v === 'string' && /^https?:\/\//i.test(v)) matched++;
+        }
+        // Most (not necessarily all) sampled non-empty values need to look like a URL —
+        // tolerant of the odd blank/malformed entry without requiring every row to match.
+        if (checked > 0 && matched / checked >= 0.8) result.add(c);
+    });
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -737,9 +753,28 @@ function extractReferencedIdentifiers(sql) {
     while ((m = re.exec(sql))) ids.add(m[1] || m[2] || m[3]);
     return ids;
 }
+// Resolves a raw regex-extracted identifier to the ACTUAL, correctly-cased
+// table/view name it refers to, if any. This matters because unquoted SQL
+// identifiers are case-insensitive in DuckDB — `from orders` matches a table
+// actually named "Orders" just fine — but a plain loadedTables[id] lookup is
+// not, so without this, a view typed in different case than its table would
+// silently fail to link up: not just for the "N of M records" display, but
+// (more importantly) for resolving which schema hash a view's visited-marks
+// belong to. Returns null if nothing currently loaded matches at all.
+function resolveLoadedIdentifier(id) {
+    if (loadedTables[id]) return id;
+    const table = tableOrder.find(n => n.toLowerCase() === id.toLowerCase());
+    if (table) return table;
+    const view = tabs.find(t => t.kind === 'view' && t.viewName.toLowerCase() === id.toLowerCase());
+    return view ? view.viewName : null;
+}
 function guessPrimaryTable(sql) {
     const ids = [...extractReferencedIdentifiers(sql)];
-    return ids.length ? ids[0] : null;
+    for (const id of ids) {
+        const resolved = resolveLoadedIdentifier(id);
+        if (resolved) return resolved;
+    }
+    return ids.length ? ids[0] : null; // nothing currently loaded matched — still useful as a raw-text label
 }
 function viewReferencesAny(sql, identifiers) {
     const ids = extractReferencedIdentifiers(sql);
@@ -800,7 +835,6 @@ function invalidateTabCache(tab) {
     tab._rowsCache = null; tab._rowsCacheVersion = -1;
     tab._colsCache = null; tab._colsCacheVersion = -1;
     tab._filterMetaCache = null; tab._filterMetaCacheVersion = -1;
-    tab._schemaHashCache = null; tab._schemaHashCacheVersion = -1;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -825,40 +859,6 @@ function columnSignature(data) {
         if (row && typeof row === 'object') Object.keys(row).forEach(k => keys.add(k));
     }
     return [...keys].sort().join('\u0001');
-}
-// ═══════════════════════════════════════════════════════════
-//  SCHEMA HASH  — identifies "this shape of data" independent of whatever a
-//  table or view happens to be named right now. Used to key visited-row
-//  state (see VISIT SYNC below) so that renaming a table, or clicking a row
-//  from a SQL view built on that table, doesn't create a second, disconnected
-//  set of visited marks. Non-cryptographic on purpose: this only needs to be
-//  a stable, synchronous, collision-resistant-enough content key, not secure.
-// ═══════════════════════════════════════════════════════════
-function hashSchemaSignature(sig) {
-    let h1 = 0x811c9dc5, h2 = 0x9e3779b9; // two independent FNV/xor-mix passes → 16 hex chars
-    for (let i = 0; i < sig.length; i++) {
-        const c = sig.charCodeAt(i);
-        h1 ^= c; h1 = Math.imul(h1, 0x01000193);
-        h2 = Math.imul(h2 ^ c, 0x85ebca6b); h2 ^= h2 >>> 13;
-    }
-    return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
-}
-function tableSchemaHash(rows) { return hashSchemaSignature(columnSignature(rows)); }
-// Resolves the schema hash a tab's visited-marks should be filed under: a
-// table tab's own hash, or — for a view — the hash of the table it's primarily
-// built on (tab.sourceTable, from guessPrimaryTable) so a view and its source
-// table always agree on the same hash. Falls back to hashing the tab's own
-// current result columns for anything that can't be resolved that way (a view
-// built on another view, a multi-table join, or a since-removed source table)
-// — visited-marking and syncing still work in that case, they just won't
-// automatically line up with a different tab.
-function getSchemaHashForTab(tab, rows) {
-    if (tab.sourceTable && loadedTables[tab.sourceTable]) return loadedTables[tab.sourceTable].schemaHash;
-    if (tab._schemaHashCacheVersion === dataVersion && tab._schemaHashCache) return tab._schemaHashCache;
-    const hash = tableSchemaHash(rows);
-    tab._schemaHashCache = hash;
-    tab._schemaHashCacheVersion = dataVersion;
-    return hash;
 }
 
 // Merge rows from files with an identical column signature. If the schema includes an
@@ -903,9 +903,9 @@ async function loadJsonTable(json, rawName, sourceFiles) {
     await setDuckDBTableData(name, json);
     dataVersion++;
 
-    const urlColumn = detectUrlColumn(json);
+    const urlColumns = detectUrlColumns(json);
     const allKeys = unionKeys(json);
-    loadedTables[name] = { rawName, allKeys, rowCount: json.length, urlColumn, sourceFiles: sourceFiles || [rawName], schemaHash: tableSchemaHash(json) };
+    loadedTables[name] = { rawName, allKeys, rowCount: json.length, urlColumns: [...urlColumns], sourceFiles: sourceFiles || [rawName] };
     if (!tableOrder.includes(name)) tableOrder.push(name);
 
     let tab = tabs.find(t => t.key === name);
@@ -916,7 +916,7 @@ async function loadJsonTable(json, rawName, sourceFiles) {
             hiddenColumns: new Set(), sorts: [], colWidths: {},
             quickFilter: '', columnFilters: {},
             _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
-            _filterMetaCache: null, _filterMetaCacheVersion: -1, _schemaHashCache: null, _schemaHashCacheVersion: -1
+            _filterMetaCache: null, _filterMetaCacheVersion: -1
         };
         tabs.push(tab);
     }
@@ -1100,7 +1100,7 @@ async function loadCategoriesFromText(text) {
                         hiddenColumns: new Set(), sorts: [], colWidths: {},
                         quickFilter: '', columnFilters: {},
                         _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
-                        _filterMetaCache: null, _filterMetaCacheVersion: -1, _schemaHashCache: null, _schemaHashCacheVersion: -1
+                        _filterMetaCache: null, _filterMetaCacheVersion: -1
                     };
                     tabs.push(tab);
                     touchedTabs.push(tab);
@@ -1173,80 +1173,64 @@ function triggerDownload(content, filename, mime) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  VISIT SYNC  — persists visited-row marks to visit_log.json in the loaded
-//  folder (or downloads it, if there's no writable folder handle), keyed by
-//  schema hash rather than table/view name so it survives renames and stays
-//  in sync between a table and any view built on it. See getSchemaHashForTab
-//  and parseVisitUid above for how that linkage actually works; this section
-//  is just the file I/O and the "N unsynced" bookkeeping around it.
+//  VISIT SYNC  — persists visited-row ids to visit_log.json in the loaded
+//  folder (or downloads it, if there's no writable folder handle). The file
+//  is deliberately flat — just a list of ids, with no table/view/schema
+//  grouping at all — because rowVisitId above already makes "visited" a
+//  global property of an id, not of any particular tab. This section is
+//  just the file I/O and the "N unsynced" bookkeeping around that.
 // ═══════════════════════════════════════════════════════════
 function persistClickedItems() {
     try { localStorage.setItem('clickedItems', JSON.stringify([...clickedItems])); } catch (e) {}
 }
+// One-way visited mark used by keyboard row traversal (ArrowUp/ArrowDown, further
+// down): adds to clickedItems if not already present, but unlike the click handler,
+// never toggles it back off, and never removes the row even with "Hide Visited" on
+// (making the row you just navigated onto vanish would break keyboard navigation).
+// No-ops entirely for a row with no visit-trackable id — same rule as a click.
+function markRowVisitedOnly(row, uid) {
+    if (!uid) return;
+    row.classList.add('visited');
+    if (clickedItems.has(uid)) return;
+    clickedItems.add(uid);
+    persistClickedItems();
+    renderVisitSyncStatus();
+}
 function buildVisitLogPayload() {
-    const visits = {};
-    for (const uid of clickedItems) {
-        const parsed = parseVisitUid(uid);
-        if (!parsed || !parsed.stable) continue; // positional-only marks aren't portable across reloads
-        (visits[parsed.hash] || (visits[parsed.hash] = [])).push(parsed.id);
-    }
-    Object.values(visits).forEach(list => list.sort());
-    return { version: 1, savedAt: new Date().toISOString(), visits };
+    return { version: 2, savedAt: new Date().toISOString(), visited: [...clickedItems].sort() };
 }
 function restoreVisitsFromLog(data) {
-    const visits = (data && typeof data === 'object' && data.visits && typeof data.visits === 'object') ? data.visits : null;
-    if (!visits) return;
-    lastSyncedVisits = {};
-    Object.entries(visits).forEach(([hash, ids]) => {
-        if (!Array.isArray(ids)) return;
-        lastSyncedVisits[hash] = new Set(ids.map(String));
-        ids.forEach(id => clickedItems.add(`${hash}_${id}`));
-    });
+    const visited = Array.isArray(data && data.visited) ? data.visited
+        : Array.isArray(data && data.visits) ? Object.values(data.visits).flat() // best-effort: read an old, per-hash visit_log.json too
+        : null;
+    if (!visited) return;
+    lastSyncedVisits = new Set(visited.map(String));
+    lastSyncedVisits.forEach(id => clickedItems.add(id));
     persistClickedItems();
-}
-// Groups every currently-clicked, id-based uid by schema hash, so the status
-// readout and the write path don't each re-derive this independently.
-function groupClickedByHash() {
-    const byHash = {};
-    for (const uid of clickedItems) {
-        const parsed = parseVisitUid(uid);
-        if (!parsed || !parsed.stable) continue;
-        (byHash[parsed.hash] || (byHash[parsed.hash] = new Set())).add(parsed.id);
-    }
-    return byHash;
 }
 // "Unsynced" = symmetric difference against the last-known saved file: new
 // clicks not yet saved, AND previously-saved ids since un-clicked — either way,
 // the file on disk doesn't match the current state until a sync writes it.
-function computeUnsyncedCounts() {
-    const current = groupClickedByHash();
-    const hashes = new Set([...Object.keys(current), ...Object.keys(lastSyncedVisits)]);
-    const result = {};
-    hashes.forEach(hash => {
-        const cur = current[hash] || new Set(), saved = lastSyncedVisits[hash] || new Set();
-        let diff = 0;
-        cur.forEach(id => { if (!saved.has(id)) diff++; });
-        saved.forEach(id => { if (!cur.has(id)) diff++; });
-        if (diff > 0) result[hash] = diff;
-    });
-    return result;
+function computeUnsyncedCount() {
+    let diff = 0;
+    clickedItems.forEach(id => { if (!lastSyncedVisits.has(id)) diff++; });
+    lastSyncedVisits.forEach(id => { if (!clickedItems.has(id)) diff++; });
+    return diff;
 }
 function renderVisitSyncStatus() {
     const el = document.getElementById('visitSyncStatus');
     if (!el) return;
     if (!tableOrder.length) { el.style.display = 'none'; return; }
     el.style.display = '';
-    const unsynced = computeUnsyncedCounts();
-    const hashes = Object.keys(unsynced);
-    if (!hashes.length) {
+    const unsynced = computeUnsyncedCount();
+    if (unsynced === 0) {
         el.className = 'visit-sync-status';
         el.textContent = '✓ visits synced';
-        el.title = 'visit_log.json (or the last download) matches every visited mark in this session.';
+        el.title = 'visit_log.json (or the last download) matches every visited id in this session.';
     } else {
         el.className = 'visit-sync-status has-unsynced';
-        el.textContent = hashes.map(h => `${h.slice(0, 8)} (${unsynced[h]})`).join('  ·  ');
-        el.title = 'Schema hash → visited records not yet saved to visit_log.json:\n'
-            + hashes.map(h => `${h} — ${unsynced[h]} unsynced`).join('\n');
+        el.textContent = `${unsynced} unsynced`;
+        el.title = `${unsynced} visited id${unsynced === 1 ? '' : 's'} not yet saved to visit_log.json.`;
     }
 }
 async function writeVisitLogToFolder(dirHandle, payload) {
@@ -1277,8 +1261,7 @@ async function syncVisits() {
         // the File System Access API) — download it for the person to place by hand.
         triggerDownload(JSON.stringify(payload, null, 2), 'visit_log.json', 'application/json;charset=utf-8;');
     }
-    lastSyncedVisits = {};
-    Object.entries(payload.visits).forEach(([hash, ids]) => { lastSyncedVisits[hash] = new Set(ids.map(String)); });
+    lastSyncedVisits = new Set(payload.visited);
     renderVisitSyncStatus();
 }
 // Pulls a visit_log.json entry out of a batch of {name, file} entries (name
@@ -1588,13 +1571,15 @@ async function getTabRows(tab) {
 }
 function getTabColumnInfo(tab, rows) {
     if (tab._colsCacheVersion === dataVersion && tab._colsCache) return tab._colsCache;
-    const urlColumn = detectUrlColumn(rows);
-    const skip = new Set(['id', 'url', 'category', 'job_url', 'link', 'href', urlColumn]);
+    const urlColumns = detectUrlColumns(rows);
     const allCols = unionKeys(rows);
+    // Every detected URL column is shown like any other column (see buildGrid's
+    // click handling below) — id/category stay excluded as internal-only fields.
+    const skip = new Set(['id', 'category']);
     const cols = allCols.filter(c => !skip.has(c));
     const types = {};
     cols.forEach(c => { types[c] = detectType(c, rows); });
-    const info = { urlColumn, allCols, cols, types };
+    const info = { urlColumns, allCols, cols, types };
     tab._colsCache = info;
     tab._colsCacheVersion = dataVersion;
     return info;
@@ -1663,7 +1648,7 @@ function getColumnFilterMeta(tab, rows, cols) {
 // ═══════════════════════════════════════════════════════════
 const ROW_CHUNK = 150;
 
-function buildGrid(cols, entries, tab, urlColumn) {
+function buildGrid(cols, entries, tab, urlColumns) {
     const widths = resolveColumnWidths(tab, cols, entries.slice(0, 100).map(e => e.row));
 
     const shell = document.createElement('div');
@@ -1754,29 +1739,48 @@ function buildGrid(cols, entries, tab, urlColumn) {
     function rowsHtml(slice) {
         let html = '';
         slice.forEach(entry => {
-            const url = entry.row[urlColumn];
-            const urlAttr = url ? ` data-url="${esc(url)}"` : '';
-            const cls = clickedItems.has(entry.uid) ? ' grid-row visited' : ' grid-row';
+            const uidAttr = entry.uid != null ? ` data-uid="${esc(entry.uid)}"` : '';
+            const cls = entry.uid != null && clickedItems.has(entry.uid) ? ' grid-row visited' : ' grid-row';
             let cells = '';
-            cols.forEach((c, i) => { cells += `<div class="grid-cell" role="cell" style="${cellStyle(i)}">${esc(cellText(entry.row[c]))}</div>`; });
-            html += `<div class="${cls}" role="row" data-uid="${esc(entry.uid)}"${urlAttr}>${cells}</div>`;
+            cols.forEach((c, i) => {
+                const val = entry.row[c];
+                // Any column detectUrlColumns flagged is clickable — but only on rows
+                // where THIS cell's own value actually looks like a URL, so a mixed
+                // column (some real links, some blanks) doesn't make every cell in it
+                // appear clickable.
+                const isUrlCell = urlColumns.has(c) && typeof val === 'string' && /^https?:\/\//i.test(val);
+                const urlAttr = isUrlCell ? ` data-url="${esc(val)}" title="Click to open in a new tab"` : '';
+                cells += `<div class="grid-cell${isUrlCell ? ' url-cell' : ''}" role="cell" data-col="${esc(c)}"${urlAttr} style="${cellStyle(i)}">${esc(cellText(val))}</div>`;
+            });
+            html += `<div class="${cls}" role="row"${uidAttr}>${cells}</div>`;
         });
         return html;
+    }
+
+    let rendered = 0;
+    const sentinel = document.createElement('div');
+    sentinel.className = 'grid-sentinel';
+    sentinel.textContent = 'Loading more rows…';
+    function appendChunk() {
+        const slice = entries.slice(rendered, rendered + ROW_CHUNK);
+        body.insertAdjacentHTML('beforeend', rowsHtml(slice));
+        rendered += slice.length;
+    }
+    // Forces enough additional chunks to be rendered that `targetIndex` exists in the
+    // DOM — used when ArrowDown navigates past whatever's been lazily loaded so far.
+    // Safe to call even when targetIndex is already covered (loop just no-ops then).
+    function ensureRenderedThrough(targetIndex) {
+        while (rendered <= targetIndex && rendered < entries.length) {
+            if (sentinel.parentNode) sentinel.remove();
+            appendChunk();
+        }
+        if (rendered < entries.length) { if (!sentinel.parentNode) body.appendChild(sentinel); }
+        else if (sentinel.parentNode) sentinel.remove();
     }
 
     if (!entries.length) {
         body.innerHTML = `<div class="grid-empty">No records match</div>`;
     } else {
-        let rendered = 0;
-        const sentinel = document.createElement('div');
-        sentinel.className = 'grid-sentinel';
-        sentinel.textContent = 'Loading more rows…';
-
-        function appendChunk() {
-            const slice = entries.slice(rendered, rendered + ROW_CHUNK);
-            body.insertAdjacentHTML('beforeend', rowsHtml(slice));
-            rendered += slice.length;
-        }
         appendChunk();
         if (rendered < entries.length) {
             body.appendChild(sentinel);
@@ -1791,19 +1795,31 @@ function buildGrid(cols, entries, tab, urlColumn) {
             activeObservers.push(io);
         }
     }
+    // Reassigned fresh on every buildGrid call — see the arrow-key listener further
+    // down, which always reads this rather than closing over any one render's state.
+    keyboardFocusIndex = -1;
+    activeGridNav = { body, entries, ensureRenderedThrough };
 
     body.addEventListener('click', e => {
-        const row = e.target.closest('.grid-row[data-uid]');
+        const row = e.target.closest('.grid-row');
         if (!row) return;
-        const uid = row.dataset.uid, url = row.dataset.url;
-        row.classList.toggle('visited');
-        clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
-        persistClickedItems();
-        renderVisitSyncStatus();
-        if (hideVisited && clickedItems.has(uid)) row.remove();
-        // Only ever navigate to http(s) — loaded data is untrusted, so a javascript:,
-        // data:, file:, or other unexpected scheme in a "url" column must never run.
-        if (url && /^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
+        const cell = e.target.closest('.grid-cell[data-col]');
+        const cellUrl = cell ? cell.dataset.url : null; // present only on a url-cell with a valid http(s) value for this row
+        const uid = row.dataset.uid; // present only when this row has a usable 'id' value
+        if (uid) {
+            row.classList.toggle('visited');
+            clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
+            persistClickedItems();
+            renderVisitSyncStatus();
+            if (hideVisited && clickedItems.has(uid)) row.remove();
+        }
+        // Opening a link is scoped to whichever URL cell was actually clicked — clicking
+        // anywhere else in the row only marks it visited (and only does even that when
+        // the row has an id — see rowVisitId). Still only ever navigates to http(s):
+        // loaded data is untrusted, so a javascript:, data:, file:, or other unexpected
+        // scheme must never run — cellUrl is only ever set on cells that already passed
+        // this same check at render time, but it costs nothing to check again here too.
+        if (cellUrl && /^https?:\/\//i.test(cellUrl)) window.open(cellUrl, '_blank', 'noopener,noreferrer');
     });
 
     // Keep the header's right edge aligned with the body's content edge even when a
@@ -1927,18 +1943,18 @@ async function renderContent() {
     }
     document.getElementById('columnsDropdownBtn').style.display = '';
 
-    const { urlColumn, allCols, cols, types } = getTabColumnInfo(tab, rows);
+    const { urlColumns, allCols, cols, types } = getTabColumnInfo(tab, rows);
     const filterMeta = getColumnFilterMeta(tab, rows, cols);
     renderColManager(tab, cols, filterMeta);
 
     const visCols = cols.filter(c => !tab.hiddenColumns.has(c));
     const sorted = sortData(rows, tab.sorts, types);
 
-    // A schema hash (not the tab's own name) is the uid namespace: this is what
-    // makes a click in a view mark the same row as visited in its source table
-    // (and any other view built on that table) — see getSchemaHashForTab above.
-    const namespace = getSchemaHashForTab(tab, rows);
-    const withUid = sorted.map((row, idx) => ({ row, uid: rowUid(row, idx, namespace) }));
+    // uid is the row's own 'id' value (global — not namespaced to this tab), or null
+    // when the row has no usable id at all, meaning it can't be visit-tracked. This is
+    // what makes a click in a view mark the exact same id visited in its source table
+    // (and any other table/view that happens to use the same id) — see rowVisitId above.
+    const withUid = sorted.map(row => ({ row, uid: rowVisitId(row) }));
 
     // Column filters + the free-text quick filter both match only against
     // currently-visible columns — a hidden column's filter is kept (so it comes
@@ -2008,7 +2024,7 @@ async function renderContent() {
         content.appendChild(info);
     }
 
-    content.appendChild(buildGrid(visCols, visibleEntries, tab, urlColumn));
+    content.appendChild(buildGrid(visCols, visibleEntries, tab, urlColumns));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2088,6 +2104,37 @@ document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('catModalBackdrop').style.display !== 'none') { closeCategoriesModal(); return; }
     closeAllDropdowns();
+});
+// Up/Down traverses the currently visible grid's rows one at a time, scrolling each
+// into view and marking it visited as you land on it (one-way — see markRowVisitedOnly
+// — and only for rows with a usable id, same rule as clicking). Defined once, globally,
+// rather than inside buildGrid, so re-rendering the grid (sorting, filtering, tab
+// switches) never leaves a stale listener behind — see activeGridNav above.
+document.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (!activeGridNav || !activeGridNav.entries.length) return;
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
+    if (document.getElementById('catModalBackdrop').style.display !== 'none') return;
+    if (document.getElementById('duckdbModalBackdrop').style.display !== 'none') return;
+    e.preventDefault();
+
+    const { entries, ensureRenderedThrough, body } = activeGridNav;
+    const delta = e.key === 'ArrowDown' ? 1 : -1;
+    let next = keyboardFocusIndex + delta;
+    if (next < 0) next = 0;
+    if (next > entries.length - 1) next = entries.length - 1;
+    if (next === keyboardFocusIndex) return; // already at an edge
+
+    ensureRenderedThrough(next);
+    const rows = body.querySelectorAll('.grid-row');
+    if (keyboardFocusIndex >= 0 && rows[keyboardFocusIndex]) rows[keyboardFocusIndex].classList.remove('kbd-focus');
+    const row = rows[next];
+    if (!row) return; // shouldn't happen after ensureRenderedThrough, but stay safe
+    row.classList.add('kbd-focus');
+    row.scrollIntoView({ block: 'nearest' });
+    keyboardFocusIndex = next;
+    markRowVisitedOnly(row, entries[next].uid);
 });
 document.getElementById('catModalLoadBtn').addEventListener('click', async () => {
     const textarea = document.getElementById('catModalTextarea');
