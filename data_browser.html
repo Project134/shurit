@@ -483,6 +483,7 @@ let activeObservers = [];          // IntersectionObserver/ResizeObserver tied t
 // currently shown without ever leaking an extra document-level listener per render.
 let activeGridNav = null;
 let keyboardFocusIndex = -1;       // index into activeGridNav.entries; -1 = nothing focused yet
+let keyboardFocusRow   = null;     // the exact DOM element currently showing .kbd-focus — kept in lockstep with the index above, and read directly by Enter so it can never point at a different row than what's visibly highlighted
 
 let clickedItems   = new Set(safeLoadClickedItems());
 function safeLoadClickedItems() {
@@ -1850,6 +1851,7 @@ function buildGrid(cols, entries, tab, urlColumns) {
     // Reassigned fresh on every buildGrid call — see the arrow-key listener further
     // down, which always reads this rather than closing over any one render's state.
     keyboardFocusIndex = -1;
+    keyboardFocusRow = null;
     activeGridNav = { body, entries, ensureRenderedThrough, urlColumns, tab };
 
     body.addEventListener('click', e => {
@@ -2176,12 +2178,15 @@ document.addEventListener('keydown', e => {
     const { entries, ensureRenderedThrough, body, urlColumns, tab } = activeGridNav;
 
     if (e.key === 'Enter') {
-        if (keyboardFocusIndex < 0) return; // nothing traversed to yet this render — nothing to open
-        const entry = entries[keyboardFocusIndex];
-        const primaryCol = entry && getPrimaryUrlColumn(tab, urlColumns);
+        if (!keyboardFocusRow) return; // nothing traversed to yet this render — nothing to open
+        const primaryCol = getPrimaryUrlColumn(tab, urlColumns);
         if (!primaryCol) return;
-        const val = entry.row[primaryCol];
-        if (typeof val !== 'string' || !/^https?:\/\//i.test(val)) return;
+        // Read the url straight off the focused row's own cell, rather than re-deriving
+        // it from entries[keyboardFocusIndex] — this guarantees Enter always opens
+        // exactly the row that's visibly highlighted, never a neighboring one.
+        const cell = [...keyboardFocusRow.querySelectorAll('.grid-cell[data-col]')].find(c => c.dataset.col === primaryCol);
+        const val = cell && cell.dataset.url;
+        if (!val || !/^https?:\/\//i.test(val)) return;
         e.preventDefault();
         openUrlKeepFocus(val);
         return;
@@ -2196,12 +2201,13 @@ document.addEventListener('keydown', e => {
 
     ensureRenderedThrough(next);
     const rows = body.querySelectorAll('.grid-row');
-    if (keyboardFocusIndex >= 0 && rows[keyboardFocusIndex]) rows[keyboardFocusIndex].classList.remove('kbd-focus');
+    if (keyboardFocusRow) keyboardFocusRow.classList.remove('kbd-focus');
     const row = rows[next];
     if (!row) return; // shouldn't happen after ensureRenderedThrough, but stay safe
     row.classList.add('kbd-focus');
     row.scrollIntoView({ block: 'nearest' });
     keyboardFocusIndex = next;
+    keyboardFocusRow = row;
     markRowVisitedOnly(row, entries[next].uid);
 });
 document.getElementById('catModalLoadBtn').addEventListener('click', async () => {
