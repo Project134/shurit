@@ -125,6 +125,10 @@
     .col-filter-input:focus, .col-filter-select:focus { border-color:var(--accent); }
     .col-filter-input.filter-active, .col-filter-select.filter-active { border-color:var(--accent); color:var(--accent); }
     .col-filter-spacer { flex:1 1 auto; } /* keeps hidden columns' rows aligned even with no filter control shown */
+    .col-primary-url-btn { flex:0 0 auto; background:none; border:none; cursor:pointer; font-size:13px; line-height:1; padding:2px 4px; color:var(--text-dim); }
+    .col-primary-url-btn:hover { color:var(--accent); }
+    .col-primary-url-btn.is-primary { color:var(--accent); }
+    .col-primary-url-spacer { flex:0 0 auto; width:21px; } /* keeps rows aligned when a hidden url column's star is omitted */
 
     /* ── Table pills (loaded tables, click-to-copy) ─────────────── */
     #tablePillsWrap { display:flex; flex-wrap:wrap; gap:6px; }
@@ -337,7 +341,9 @@ Ranked - select *, row_number() over (partition by category order by amount desc
     </div>
     <div class="card-body">
         <p class="dropdown-hint">Click a column name to hide/show it. Each visible column also has a quick filter
-            below it — a dropdown for columns with a small set of values, or a "contains" search otherwise.</p>
+            below it — a dropdown for columns with a small set of values, or a "contains" search otherwise. A url-like
+            column with a ☆ can be starred as primary — that's the one the Enter key opens while navigating with
+            arrow keys, when a row has more than one url-like column.</p>
         <div id="colManagerWrap"></div>
     </div>
 </div>
@@ -464,7 +470,7 @@ let dataVersion    = 0;    // bumped whenever any table/view's underlying data c
 // name, closeable) — neither carries any naming prefix, so SQL can reference either one
 // by exactly the name shown on its tab. Each tab: { key, kind:'table'|'view', label,
 // viewName, sourceTable, raw, sql, hiddenColumns:Set, sorts:[], colWidths:{},
-// quickFilter:'', columnFilters:{}, _rowsCache, _rowsCacheVersion, _colsCache,
+// quickFilter:'', columnFilters:{}, primaryUrlColumnOverride, _rowsCache, _rowsCacheVersion, _colsCache,
 // _colsCacheVersion, _filterMetaCache, _filterMetaCacheVersion }
 let tabs           = [];
 let activeTabKey   = null;
@@ -685,6 +691,31 @@ function detectUrlColumns(data) {
         if (checked > 0 && matched / checked >= 0.8) result.add(c);
     });
     return result;
+}
+// Which url-like column the Enter key should open for a keyboard-focused row, when a
+// row could have more than one. Auto-detected — a single url column, or one literally
+// named "url" (case-insensitively) when there are several — unless the person has
+// explicitly picked one via the star control in the Columns dropdown (see
+// renderColManager). A hidden column is never eligible, whether auto-detected or as a
+// stored override, since it isn't something the person can currently see or verify.
+function getPrimaryUrlColumn(tab, urlColumns) {
+    const visible = [...urlColumns].filter(c => !tab.hiddenColumns.has(c));
+    if (tab.primaryUrlColumnOverride && visible.includes(tab.primaryUrlColumnOverride)) return tab.primaryUrlColumnOverride;
+    if (visible.length === 1) return visible[0];
+    if (visible.length > 1) {
+        const namedUrl = visible.find(c => c.toLowerCase() === 'url');
+        if (namedUrl) return namedUrl;
+    }
+    return null;
+}
+// Opens a URL the way ctrl+click does — a new (background) tab, with the current page
+// staying focused — rather than window.open()'s default of switching to the new tab.
+// window.focus() re-asserts focus on THIS window immediately afterward; browsers
+// generally honor that when, as here, it happens synchronously inside the same
+// user-gesture-driven handler (the Enter keydown) that opened the new tab.
+function openUrlKeepFocus(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    try { window.focus(); } catch (e) {}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -914,7 +945,7 @@ async function loadJsonTable(json, rawName, sourceFiles) {
             key: name, kind: 'table', label: name, viewName: name,
             sourceTable: name, raw: null, sql: `SELECT * FROM ${q(name)}`,
             hiddenColumns: new Set(), sorts: [], colWidths: {},
-            quickFilter: '', columnFilters: {},
+            quickFilter: '', columnFilters: {}, primaryUrlColumnOverride: null,
             _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
             _filterMetaCache: null, _filterMetaCacheVersion: -1
         };
@@ -1098,7 +1129,7 @@ async function loadCategoriesFromText(text) {
                         key: viewName, kind: 'view', label: name, viewName,
                         sourceTable: guessPrimaryTable(sql), raw: line, sql,
                         hiddenColumns: new Set(), sorts: [], colWidths: {},
-                        quickFilter: '', columnFilters: {},
+                        quickFilter: '', columnFilters: {}, primaryUrlColumnOverride: null,
                         _rowsCache: null, _rowsCacheVersion: -1, _colsCache: null, _colsCacheVersion: -1,
                         _filterMetaCache: null, _filterMetaCacheVersion: -1
                     };
@@ -1350,7 +1381,7 @@ function findColFilterInput(col) {
     const row = [...wrap.querySelectorAll('.col-filter-row')].find(r => r.dataset.col === col);
     return row ? row.querySelector('.col-filter-input') : null;
 }
-function renderColManager(tab, cols, filterMeta) {
+function renderColManager(tab, cols, filterMeta, urlColumns) {
     const wrap = document.getElementById('colManagerWrap');
     wrap.innerHTML = '';
     cols.forEach(col => {
@@ -1368,6 +1399,11 @@ function renderColManager(tab, cols, filterMeta) {
         });
         row.appendChild(chip);
 
+        // Only worth showing when there's an actual choice to make — a single url
+        // column is already unambiguously "the" one (see getPrimaryUrlColumn), so a
+        // moot star for it would just be clutter.
+        const isUrlCol = urlColumns && urlColumns.has(col) && urlColumns.size > 1;
+
         if (tab.hiddenColumns.has(col)) {
             // Hidden columns keep no filter control (their filter, if any, is
             // preserved but not applied — see rowMatchesColumnFilters) — a spacer
@@ -1375,6 +1411,7 @@ function renderColManager(tab, cols, filterMeta) {
             const spacer = document.createElement('span');
             spacer.className = 'col-filter-spacer';
             row.appendChild(spacer);
+            if (isUrlCol) row.appendChild(Object.assign(document.createElement('span'), { className: 'col-primary-url-spacer' }));
         } else {
             const meta = (filterMeta && filterMeta[col]) || { mode: 'text' };
             const current = tab.columnFilters[col] || '';
@@ -1411,6 +1448,21 @@ function renderColManager(tab, cols, filterMeta) {
                     if (ev.key === 'Escape' && input.value) { ev.preventDefault(); ev.stopPropagation(); delete tab.columnFilters[col]; renderContent(); }
                 });
                 row.appendChild(input);
+            }
+            if (isUrlCol) {
+                const isPrimary = getPrimaryUrlColumn(tab, urlColumns) === col;
+                const star = document.createElement('button');
+                star.type = 'button';
+                star.className = 'col-primary-url-btn' + (isPrimary ? ' is-primary' : '');
+                star.textContent = isPrimary ? '⭐' : '☆';
+                star.title = isPrimary
+                    ? 'Primary URL column — this is what Enter opens on a keyboard-focused row. Click to clear your choice.'
+                    : 'Set as the primary URL column (opened by pressing Enter on a keyboard-focused row)';
+                star.addEventListener('click', async () => {
+                    tab.primaryUrlColumnOverride = isPrimary ? null : col;
+                    await renderContent();
+                });
+                row.appendChild(star);
             }
         }
         wrap.appendChild(row);
@@ -1798,7 +1850,7 @@ function buildGrid(cols, entries, tab, urlColumns) {
     // Reassigned fresh on every buildGrid call — see the arrow-key listener further
     // down, which always reads this rather than closing over any one render's state.
     keyboardFocusIndex = -1;
-    activeGridNav = { body, entries, ensureRenderedThrough };
+    activeGridNav = { body, entries, ensureRenderedThrough, urlColumns, tab };
 
     body.addEventListener('click', e => {
         const row = e.target.closest('.grid-row');
@@ -1945,7 +1997,7 @@ async function renderContent() {
 
     const { urlColumns, allCols, cols, types } = getTabColumnInfo(tab, rows);
     const filterMeta = getColumnFilterMeta(tab, rows, cols);
-    renderColManager(tab, cols, filterMeta);
+    renderColManager(tab, cols, filterMeta, urlColumns);
 
     const visCols = cols.filter(c => !tab.hiddenColumns.has(c));
     const sorted = sortData(rows, tab.sorts, types);
@@ -2107,19 +2159,35 @@ document.addEventListener('keydown', e => {
 });
 // Up/Down traverses the currently visible grid's rows one at a time, scrolling each
 // into view and marking it visited as you land on it (one-way — see markRowVisitedOnly
-// — and only for rows with a usable id, same rule as clicking). Defined once, globally,
-// rather than inside buildGrid, so re-rendering the grid (sorting, filtering, tab
-// switches) never leaves a stale listener behind — see activeGridNav above.
+// — and only for rows with a usable id, same rule as clicking). Enter opens the
+// keyboard-focused row's primary URL column (see getPrimaryUrlColumn) in a background
+// tab — like ctrl+click, this page stays focused rather than switching to the new tab.
+// Defined once, globally, rather than inside buildGrid, so re-rendering the grid
+// (sorting, filtering, tab switches) never leaves a stale listener behind — see
+// activeGridNav above, which buildGrid reassigns on every render.
 document.addEventListener('keydown', e => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
     if (!activeGridNav || !activeGridNav.entries.length) return;
     const ae = document.activeElement;
-    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.tagName === 'BUTTON' || ae.tagName === 'A' || ae.isContentEditable)) return;
     if (document.getElementById('catModalBackdrop').style.display !== 'none') return;
     if (document.getElementById('duckdbModalBackdrop').style.display !== 'none') return;
-    e.preventDefault();
 
-    const { entries, ensureRenderedThrough, body } = activeGridNav;
+    const { entries, ensureRenderedThrough, body, urlColumns, tab } = activeGridNav;
+
+    if (e.key === 'Enter') {
+        if (keyboardFocusIndex < 0) return; // nothing traversed to yet this render — nothing to open
+        const entry = entries[keyboardFocusIndex];
+        const primaryCol = entry && getPrimaryUrlColumn(tab, urlColumns);
+        if (!primaryCol) return;
+        const val = entry.row[primaryCol];
+        if (typeof val !== 'string' || !/^https?:\/\//i.test(val)) return;
+        e.preventDefault();
+        openUrlKeepFocus(val);
+        return;
+    }
+
+    e.preventDefault();
     const delta = e.key === 'ArrowDown' ? 1 : -1;
     let next = keyboardFocusIndex + delta;
     if (next < 0) next = 0;
