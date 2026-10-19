@@ -23,6 +23,8 @@
         --th-bg:         #1e2335;
         --visited-bg:    #0d2b1e;
         --visited-hover: #112e21;
+        --mark-bg:       rgba(247,201,79,.24);
+        --mark-hover:    rgba(247,201,79,.32);
         --row-hover:     #1e2335;
         --shadow:        0 2px 12px rgba(0,0,0,0.4);
         --mono: 'JetBrains Mono', monospace;
@@ -44,6 +46,8 @@
         --th-bg:         #eef0f7;
         --visited-bg:    #dcfce7;
         --visited-hover: #bbf7d0;
+        --mark-bg:       #fef08a;
+        --mark-hover:    #fde68a;
         --row-hover:     #f0f3ff;
         --shadow:        0 2px 12px rgba(0,0,0,0.08);
     }
@@ -219,10 +223,21 @@
     .col-resize-handle:hover, .col-resize-handle.resizing { background:var(--accent); opacity:.55; }
 
     .grid-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; }
-    .grid-row { display:flex; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+    .grid-row { display:flex; position:relative; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
     .grid-row:hover { background:var(--row-hover); }
     .grid-row.visited { background:var(--visited-bg); }
     .grid-row.visited:hover { background:var(--visited-hover); }
+    /* Marked (yellow) wins over visited (green) when a row is both. */
+    .grid-row.marked, .grid-row.visited.marked { background:var(--mark-bg); }
+    .grid-row.marked:hover, .grid-row.visited.marked:hover { background:var(--mark-hover); }
+    .grid-cell.cell-copied { box-shadow:inset 0 0 0 2px var(--success); }
+    .row-mark-btn { position:absolute; right:6px; top:3px; z-index:1; font-size:13px; line-height:1; padding:2px 5px; border-radius:4px; background:var(--surface2); border:1px solid var(--border); color:var(--text-dim); opacity:0; transition:opacity .1s; user-select:none; }
+    .grid-row:hover .row-mark-btn, .grid-row.kbd-focus .row-mark-btn, .grid-row.marked .row-mark-btn { opacity:1; }
+    .row-mark-btn:hover { color:var(--accent2); border-color:var(--accent2); }
+    .grid-row.marked .row-mark-btn { color:var(--accent2); border-color:var(--accent2); }
+    .rowfilter-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .rowfilter-row .rf-label { flex:0 0 28%; font-weight:500; color:var(--text-head); }
+    .rowfilter-row .rf-count { flex:1 1 auto; font-family:var(--mono); font-size:10px; color:var(--text-dim); }
     .grid-cell { box-sizing:border-box; padding:5px 8px; border-right:1px solid var(--border); white-space:normal; word-break:break-word; overflow-wrap:break-word; color:var(--text); line-height:1.5; }
     .grid-cell:last-child { border-right:none; }
     .grid-row.kbd-focus { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -269,7 +284,7 @@
         📄 Load Categories (SQL)
     </button>
     <button class="btn btn-danger" id="clearCatBtn" style="display:none">✕ Clear Categories</button>
-    <button class="btn btn-outline" id="hideVisitedBtn" style="display:none">🙈 Hide Visited</button>
+    <button class="btn btn-outline dropdown-trigger" id="rowFilterBtn" style="display:none" title="Hide or unhide synced Marked / Visited rows">🔎 Filter</button>
     <button class="btn btn-outline" id="syncVisitsBtn" style="display:none"
             title="Save visited row ids to visit_log.json in the loaded folder (or download it, if this data wasn't loaded via &quot;Load Folder&quot;) — just a flat list of ids, shared by every table and view that has an 'id' column, so a click anywhere updates every other place that same id shows up. Rows with no 'id' column can't be tracked this way.">
         💾 Sync Visits
@@ -345,6 +360,16 @@ Ranked - select *, row_number() over (partition by category order by amount desc
             column with a ☆ can be starred as primary — that's the one the Enter key opens while navigating with
             arrow keys, when a row has more than one url-like column.</p>
         <div id="colManagerWrap"></div>
+    </div>
+</div>
+
+<!-- ── Dropdown: Row filter (hide/unhide marked & visited rows) ── -->
+<div id="rowFilterDropdown" class="dropdown-panel" style="display:none">
+    <div class="card-header"><strong>🔎 Row Filter</strong></div>
+    <div class="card-body">
+        <p class="dropdown-hint">Hide or unhide rows by status. Only rows already saved with <strong>💾 Sync Visits</strong>
+            are ever hidden — rows you visit or mark in this session stay on screen until you sync.</p>
+        <div id="rowFilterWrap"></div>
     </div>
 </div>
 
@@ -475,7 +500,8 @@ let dataVersion    = 0;    // bumped whenever any table/view's underlying data c
 let tabs           = [];
 let activeTabKey   = null;
 let categoryErrors = [];
-let hideVisited    = false;
+let hideVisited    = false;   // hides SYNCED visited rows only (see lastSyncedVisits)
+let hideMarked     = false;   // hides SYNCED marked rows only (see lastSyncedMarked)
 let openDropdownId = null;         // 'tablesDropdown' | 'columnsDropdown' | null
 let activeObservers = [];          // IntersectionObserver/ResizeObserver tied to the current #content render
 // Reassigned by buildGrid on every render (never appended to) — lets the single,
@@ -485,6 +511,12 @@ let activeGridNav = null;
 let keyboardFocusIndex = -1;       // index into activeGridNav.entries; -1 = nothing focused yet
 let keyboardFocusRow   = null;     // the exact DOM element currently showing .kbd-focus — kept in lockstep with the index above, and read directly by Enter so it can never point at a different row than what's visibly highlighted
 
+let markedItems    = new Set(safeLoadMarkedItems());
+function safeLoadMarkedItems() {
+    try { return JSON.parse(localStorage.getItem('markedItems') || '[]'); }
+    catch (e) { return []; }
+}
+let lastSyncedMarked = new Set(); // last-known "marked" ids in visit_log.json
 let clickedItems   = new Set(safeLoadClickedItems());
 function safeLoadClickedItems() {
     try { return JSON.parse(localStorage.getItem('clickedItems') || '[]'); }
@@ -1228,17 +1260,36 @@ function markRowVisitedOnly(row, uid) {
     persistClickedItems();
     renderVisitSyncStatus();
 }
+function persistMarkedItems() {
+    try { localStorage.setItem('markedItems', JSON.stringify([...markedItems])); } catch (e) {}
+}
+// Toggles the yellow "marked" state of a row (by id) and updates every rendered copy of it.
+function toggleRowMarked(row, uid) {
+    if (!uid) return;
+    const nowMarked = !markedItems.has(uid);
+    nowMarked ? markedItems.add(uid) : markedItems.delete(uid);
+    row.classList.toggle('marked', nowMarked);
+    persistMarkedItems();
+    renderVisitSyncStatus();
+}
 function buildVisitLogPayload() {
-    return { version: 2, savedAt: new Date().toISOString(), visited: [...clickedItems].sort() };
+    return { version: 3, savedAt: new Date().toISOString(), visited: [...clickedItems].sort(), marked: [...markedItems].sort() };
 }
 function restoreVisitsFromLog(data) {
     const visited = Array.isArray(data && data.visited) ? data.visited
         : Array.isArray(data && data.visits) ? Object.values(data.visits).flat() // best-effort: read an old, per-hash visit_log.json too
         : null;
-    if (!visited) return;
-    lastSyncedVisits = new Set(visited.map(String));
-    lastSyncedVisits.forEach(id => clickedItems.add(id));
-    persistClickedItems();
+    const marked = Array.isArray(data && data.marked) ? data.marked : null;
+    if (visited) {
+        lastSyncedVisits = new Set(visited.map(String));
+        lastSyncedVisits.forEach(id => clickedItems.add(id));
+        persistClickedItems();
+    }
+    if (marked) {
+        lastSyncedMarked = new Set(marked.map(String));
+        lastSyncedMarked.forEach(id => markedItems.add(id));
+        persistMarkedItems();
+    }
 }
 // "Unsynced" = symmetric difference against the last-known saved file: new
 // clicks not yet saved, AND previously-saved ids since un-clicked — either way,
@@ -1247,6 +1298,8 @@ function computeUnsyncedCount() {
     let diff = 0;
     clickedItems.forEach(id => { if (!lastSyncedVisits.has(id)) diff++; });
     lastSyncedVisits.forEach(id => { if (!clickedItems.has(id)) diff++; });
+    markedItems.forEach(id => { if (!lastSyncedMarked.has(id)) diff++; });
+    lastSyncedMarked.forEach(id => { if (!markedItems.has(id)) diff++; });
     return diff;
 }
 function renderVisitSyncStatus() {
@@ -1262,7 +1315,7 @@ function renderVisitSyncStatus() {
     } else {
         el.className = 'visit-sync-status has-unsynced';
         el.textContent = `${unsynced} unsynced`;
-        el.title = `${unsynced} visited id${unsynced === 1 ? '' : 's'} not yet saved to visit_log.json.`;
+        el.title = `${unsynced} visited id${unsynced === 1 ? '' : 's'} not yet saved to visit_log.json (visited and marked combined).`;
     }
 }
 async function writeVisitLogToFolder(dirHandle, payload) {
@@ -1294,6 +1347,7 @@ async function syncVisits() {
         triggerDownload(JSON.stringify(payload, null, 2), 'visit_log.json', 'application/json;charset=utf-8;');
     }
     lastSyncedVisits = new Set(payload.visited);
+    lastSyncedMarked = new Set(payload.marked);
     renderVisitSyncStatus();
 }
 // Pulls a visit_log.json entry out of a batch of {name, file} entries (name
@@ -1320,7 +1374,7 @@ async function extractAndRestoreVisitLog(entries) {
 async function renderAll() {
     document.getElementById('catFileBtn').style.display     = tableOrder.length ? '' : 'none';
     document.getElementById('clearCatBtn').style.display    = tabs.some(t => t.kind === 'view') ? '' : 'none';
-    document.getElementById('hideVisitedBtn').style.display = tableOrder.length ? '' : 'none';
+    document.getElementById('rowFilterBtn').style.display   = tableOrder.length ? '' : 'none';
     document.getElementById('syncVisitsBtn').style.display  = tableOrder.length ? '' : 'none';
     renderVisitSyncStatus();
 
@@ -1483,22 +1537,42 @@ document.getElementById('clearColFiltersBtn').addEventListener('click', async ()
 // ═══════════════════════════════════════════════════════════
 //  HIDE / SHOW VISITED ROWS
 // ═══════════════════════════════════════════════════════════
-function updateHideVisitedBtn() {
-    const btn = document.getElementById('hideVisitedBtn');
-    btn.textContent = hideVisited ? '👁 Show Visited' : '🙈 Hide Visited';
-    btn.classList.toggle('btn-primary', hideVisited);
-    btn.classList.toggle('btn-outline', !hideVisited);
+function renderRowFilter() {
+    const wrap = document.getElementById('rowFilterWrap');
+    const btn = document.getElementById('rowFilterBtn');
+    const defs = [
+        { key: 'marked',  label: '★ Marked',  hidden: hideMarked,  synced: lastSyncedMarked.size,  total: markedItems.size },
+        { key: 'visited', label: '✓ Visited', hidden: hideVisited, synced: lastSyncedVisits.size, total: clickedItems.size },
+    ];
+    wrap.innerHTML = defs.map(d => `
+        <div class="rowfilter-row" data-key="${d.key}">
+            <span class="rf-label">${d.label}</span>
+            <button class="col-chip${d.hidden ? ' hidden-col' : ''}" data-toggle="${d.key}" style="flex:0 0 auto;"
+                    title="${d.hidden ? 'Unhide' : 'Hide'} synced ${d.key} rows">${d.hidden ? '👁 Unhide' : '🙈 Hide'}</button>
+            <span class="rf-count">${d.synced} synced · ${d.total} total</span>
+        </div>`).join('');
+    wrap.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
+        if (b.dataset.toggle === 'marked') hideMarked = !hideMarked; else hideVisited = !hideVisited;
+        renderRowFilter();
+        await renderContent();
+    }));
+    const active = hideMarked || hideVisited;
+    btn.classList.toggle('btn-primary', active);
+    btn.classList.toggle('btn-outline', !active);
 }
-document.getElementById('hideVisitedBtn').addEventListener('click', async () => {
-    hideVisited = !hideVisited;
-    updateHideVisitedBtn();
-    await renderContent();
+document.getElementById('rowFilterBtn').addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    renderRowFilter();
+    toggleDropdown('rowFilterDropdown', this);
 });
-updateHideVisitedBtn();
+renderRowFilter();
 document.getElementById('syncVisitsBtn').addEventListener('click', async () => {
     const btn = document.getElementById('syncVisitsBtn');
     btn.disabled = true;
     try { await syncVisits(); } finally { btn.disabled = false; }
+    // Newly-synced rows now qualify for hiding, so re-apply the Row Filter.
+    renderRowFilter();
+    if (hideVisited || hideMarked) await renderContent();
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1793,7 +1867,10 @@ function buildGrid(cols, entries, tab, urlColumns) {
         let html = '';
         slice.forEach(entry => {
             const uidAttr = entry.uid != null ? ` data-uid="${esc(entry.uid)}"` : '';
-            const cls = entry.uid != null && clickedItems.has(entry.uid) ? ' grid-row visited' : ' grid-row';
+            let cls = ' grid-row';
+            if (entry.uid != null && clickedItems.has(entry.uid)) cls += ' visited';
+            if (entry.uid != null && markedItems.has(entry.uid)) cls += ' marked';
+            const markBtn = entry.uid != null ? '<span class="row-mark-btn" role="button" title="Mark / unmark this row (yellow) — or press Tab on the focused row">★</span>' : '';
             let cells = '';
             cols.forEach((c, i) => {
                 const val = entry.row[c];
@@ -1805,7 +1882,7 @@ function buildGrid(cols, entries, tab, urlColumns) {
                 const urlAttr = isUrlCell ? ` data-url="${esc(val)}" title="Click to open in a new tab"` : '';
                 cells += `<div class="grid-cell${isUrlCell ? ' url-cell' : ''}" role="cell" data-col="${esc(c)}"${urlAttr} style="${cellStyle(i)}">${esc(cellText(val))}</div>`;
             });
-            html += `<div class="${cls}" role="row"${uidAttr}>${cells}</div>`;
+            html += `<div class="${cls}" role="row"${uidAttr}>${cells}${markBtn}</div>`;
         });
         return html;
     }
@@ -1857,22 +1934,38 @@ function buildGrid(cols, entries, tab, urlColumns) {
     body.addEventListener('click', e => {
         const row = e.target.closest('.grid-row');
         if (!row) return;
+        const uid = row.dataset.uid; // present only when this row has a usable 'id' value
+
+        // ★ button: toggles the yellow mark only — no visit, no copy, no navigation.
+        if (e.target.closest('.row-mark-btn')) {
+            e.stopPropagation();
+            toggleRowMarked(row, uid);
+            return;
+        }
+
         const cell = e.target.closest('.grid-cell[data-col]');
         const cellUrl = cell ? cell.dataset.url : null; // present only on a url-cell with a valid http(s) value for this row
-        const uid = row.dataset.uid; // present only when this row has a usable 'id' value
-        if (uid) {
-            row.classList.toggle('visited');
-            clickedItems.has(uid) ? clickedItems.delete(uid) : clickedItems.add(uid);
-            persistClickedItems();
-            renderVisitSyncStatus();
-            if (hideVisited && clickedItems.has(uid)) row.remove();
+
+        // Visiting is one-way: the first click turns the row green and it stays green.
+        // The row is never removed here — "Hide" only ever applies to synced rows.
+        if (uid) markRowVisitedOnly(row, uid);
+
+        // Copy ONLY the clicked cell's content (not the whole row). Skipped when the person
+        // has just dragged to select text, so manual selection/copy still works.
+        if (cell) {
+            const sel = window.getSelection && window.getSelection().toString();
+            const text = cell.textContent;
+            if (!sel && text !== '') {
+                copyText(text).then(() => {
+                    cell.classList.add('cell-copied');
+                    setTimeout(() => cell.classList.remove('cell-copied'), 600);
+                }).catch(() => {});
+            }
         }
-        // Opening a link is scoped to whichever URL cell was actually clicked — clicking
-        // anywhere else in the row only marks it visited (and only does even that when
-        // the row has an id — see rowVisitId). Still only ever navigates to http(s):
-        // loaded data is untrusted, so a javascript:, data:, file:, or other unexpected
-        // scheme must never run — cellUrl is only ever set on cells that already passed
-        // this same check at render time, but it costs nothing to check again here too.
+
+        // Opening a link is scoped to whichever URL cell was actually clicked. Still only ever
+        // navigates to http(s): loaded data is untrusted, so a javascript:, data:, file:, or
+        // other unexpected scheme must never run.
         if (cellUrl && /^https?:\/\//i.test(cellUrl)) window.open(cellUrl, '_blank', 'noopener,noreferrer');
     });
 
@@ -2019,7 +2112,11 @@ async function renderContent() {
     if (tab.quickFilter) entries = entries.filter(e => rowMatchesQuickFilter(e.row, visCols, tab.quickFilter));
     const filteredOutCount = withUid.length - entries.length;
 
-    const visibleEntries = hideVisited ? entries.filter(e => !clickedItems.has(e.uid)) : entries;
+    // Hiding only ever applies to rows already SYNCED to visit_log.json — anything visited
+    // or marked this session stays on screen until Sync Visits is pressed.
+    const isHiddenEntry = e => e.uid != null && (
+        (hideVisited && lastSyncedVisits.has(e.uid)) || (hideMarked && lastSyncedMarked.has(e.uid)));
+    const visibleEntries = (hideVisited || hideMarked) ? entries.filter(e => !isHiddenEntry(e)) : entries;
     const hiddenVisitedCount = entries.length - visibleEntries.length;
 
     const toolbar = document.createElement('div');
@@ -2029,7 +2126,7 @@ async function renderContent() {
         ? `${visibleEntries.length} of ${totalForTable} record${totalForTable !== 1 ? 's' : ''}`
         : `${visibleEntries.length} record${visibleEntries.length !== 1 ? 's' : ''}`;
     if (filteredOutCount > 0) countText += ` · ${filteredOutCount} filtered out`;
-    if (hideVisited && hiddenVisitedCount > 0) countText += ` · ${hiddenVisitedCount} visited hidden`;
+    if (hiddenVisitedCount > 0) countText += ` · ${hiddenVisitedCount} synced row${hiddenVisitedCount !== 1 ? 's' : ''} hidden`;
     toolbar.innerHTML = `
         <span>${esc(tab.label)}</span>
         <span class="count">${countText}</span>
@@ -2168,7 +2265,7 @@ document.addEventListener('keydown', e => {
 // (sorting, filtering, tab switches) never leaves a stale listener behind — see
 // activeGridNav above, which buildGrid reassigns on every render.
 document.addEventListener('keydown', e => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter' && e.key !== 'Tab') return;
     if (!activeGridNav || !activeGridNav.entries.length) return;
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.tagName === 'BUTTON' || ae.tagName === 'A' || ae.isContentEditable)) return;
@@ -2176,6 +2273,17 @@ document.addEventListener('keydown', e => {
     if (document.getElementById('duckdbModalBackdrop').style.display !== 'none') return;
 
     const { entries, ensureRenderedThrough, body, urlColumns, tab } = activeGridNav;
+
+    // Tab: mark / unmark the keyboard-focused row (yellow). Only takes over Tab once a row
+    // has been keyboard-focused with the arrow keys; otherwise Tab behaves normally.
+    if (e.key === 'Tab') {
+        if (!keyboardFocusRow || e.ctrlKey || e.metaKey || e.altKey) return;
+        const uid = keyboardFocusRow.dataset.uid;
+        if (!uid) return;
+        e.preventDefault();
+        toggleRowMarked(keyboardFocusRow, uid);
+        return;
+    }
 
     if (e.key === 'Enter') {
         if (!keyboardFocusRow) return; // nothing traversed to yet this render — nothing to open
@@ -2189,6 +2297,7 @@ document.addEventListener('keydown', e => {
         if (!val || !/^https?:\/\//i.test(val)) return;
         e.preventDefault();
         openUrlKeepFocus(val);
+        markRowVisitedOnly(keyboardFocusRow, keyboardFocusRow.dataset.uid);
         return;
     }
 
