@@ -17,7 +17,8 @@
   "linkedin_5":"https://www.linkedin.com/search/results/content/?keywords=%28%22hiring%22%29%20AND%20%28%22analytics%22%20OR%20%22business%20intelligence%22%20OR%20%22data%22%29%20AND%20%28%22.com%22%29&origin=GLOBAL_SEARCH_HEADER&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D",
   "linkedin_6":"https://www.linkedin.com/search/results/content/?keywords=%22hiring%22%20AND%20%22analytics%22%20&origin=GLOBAL_SEARCH_HEADER&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D&authorJobTitle=%22director%22",
   "builtin_base":"https://builtin.com/jobs",
-  "builtin_1":"https://builtin.com/jobs?search=Analytics&daysSinceUpdated=3&city=&state=&country=IND&allLocations=true"
+  "builtin_1":"https://builtin.com/jobs?search=Analytics&daysSinceUpdated=3&city=&state=&country=IND&allLocations=true",
+  "builtin_2":"https://builtin.com/jobs?search=Business+Intelligence&daysSinceUpdated=3&country=IND&allLocations=true"
 }
 
 
