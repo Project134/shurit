@@ -15,7 +15,9 @@
   "linkedin_3":"https://www.linkedin.com/search/results/content/?keywords=%22hiring%22%20AND%20%22analytics%22%20&origin=FACETED_SEARCH&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D&authorCompany=%5B%2217719%22%2C%22950185%22%2C%221344%22%2C%22255117%22%2C%2237530211%22%2C%2214468770%22%2C%22404429%22%2C%223894%22%2C%22123380%22%2C%2226061%22%2C%22207470%22%2C%2210801655%22%2C%222748%22%2C%223995846%22%2C%2211369%22%2C%221431%22%2C%221115%22%2C%221043%22%2C%221015%22%2C%222393200%22%2C%221603%22%2C%22102512292%22%2C%22107143669%22%2C%22103531%22%2C%2230419%22%2C%221353%22%2C%221283%22%2C%221318%22%2C%221756%22%2C%223067%22%2C%229390173%22%2C%221292%22%5D",
   "linkedin_4":"https://www.linkedin.com/search/results/content/?keywords=%28%22hiring%22%29%20AND%20%28%22director%22%20OR%20%22manager%22%20OR%20%22head%22%29%20AND%20%28%22analytics%22%29%20AND%20%28%22.com%22%29&origin=GLOBAL_SEARCH_HEADER&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D",
   "linkedin_5":"https://www.linkedin.com/search/results/content/?keywords=%28%22hiring%22%29%20AND%20%28%22analytics%22%20OR%20%22business%20intelligence%22%20OR%20%22data%22%29%20AND%20%28%22.com%22%29&origin=GLOBAL_SEARCH_HEADER&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D",
-  "linkedin_6":"https://www.linkedin.com/search/results/content/?keywords=%22hiring%22%20AND%20%22analytics%22%20&origin=GLOBAL_SEARCH_HEADER&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D&authorJobTitle=%22director%22"
+  "linkedin_6":"https://www.linkedin.com/search/results/content/?keywords=%22hiring%22%20AND%20%22analytics%22%20&origin=GLOBAL_SEARCH_HEADER&sortBy=%5B%22date_posted%22%5D&datePosted=%5B%22past-week%22%5D&authorJobTitle=%22director%22",
+  "builtin_base":"https://builtin.com/jobs",
+  "builtin_1":"https://builtin.com/jobs?search=Analytics&daysSinceUpdated=3&city=&state=&country=IND&allLocations=true"
 }
 
 
