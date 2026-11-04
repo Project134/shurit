@@ -46,7 +46,7 @@ button.ghost{background:transparent;color:var(--text);border:1px solid var(--bor
   <section class="card">
     <h2>3 · Control panels</h2>
     <p class="hint">Generate the scripts, then for each site: open it, press F12 → Console, paste its script, and click “Select folder” in the panel that appears (pick the same folder). Allow popups for each site.</p>
-    <div class="row"><label class="hint">Wait after page load (ms) <input id="wait" type="number" value="1000" min="0" step="100"></label><label class="hint">Open pages as <select id="openas"><option value="window">separate window (best for scrolling)</option><option value="tab">new tab</option></select></label><label class="hint">Settle after each function (ms) <input id="settle" type="number" value="500" min="0" step="100"></label><label class="hint">Max per function (min) <input id="limit" type="number" value="10" min="1" step="1"></label><button id="gen">Generate panel scripts</button><button id="copypop" class="ghost">Copy popup helper</button></div>
+    <div class="row"><label class="hint">Wait after page load (ms) <input id="wait" type="number" value="1000" min="0" step="100"></label><label class="hint">Open pages as <select id="openas"><option value="window">separate window (best for scrolling)</option><option value="tab">new tab</option></select></label><label class="hint">After the functions run <select id="after"><option value="keep">keep the page open</option><option value="close">close the page</option></select></label><label class="hint">Panel checks every (min) <input id="every" type="number" value="3" min="0.05" step="0.5"></label><label class="hint">Settle after each function (ms) <input id="settle" type="number" value="500" min="0" step="100"></label><label class="hint">Max per function (min) <input id="limit" type="number" value="10" min="1" step="1"></label><button id="gen">Generate panel scripts</button><button id="copypop" class="ghost">Copy popup helper</button></div>
     <div id="panels"></div>
   </section>
 
@@ -54,6 +54,7 @@ button.ghost{background:transparent;color:var(--text);border:1px solid var(--bor
     <h2>4 · Run</h2>
     <div class="row" style="margin-top:0"><button id="start">Start (0 → 1)</button><button id="reset" class="ghost">Reset everything</button><button id="dl" class="ghost">Download log</button></div>
     <div id="state" class="hint" style="margin-top:8px"></div>
+    <div id="stall" class="hint bad" style="margin-top:4px"></div>
     <div id="msg"></div>
     <div id="log" class="log"></div>
   </section>
@@ -99,7 +100,7 @@ function panelMain(cfg,fmt,FN){
   const BTN='background:#2563eb;color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit';
   const hbName=location.origin.replace(/[^a-z0-9]/gi,'_')+'.json';
   const canAttr=(()=>{try{return(new Error().stack||'').indexOf(MARK)>-1;}catch(e){return false;}})();
-  let stateH=null,logsDir=null,pdir=null,logH=null,timer=null,hbT=null,intervalMin=3,paused=false,busy=false,inStep=false,aborted=false,resetSeen=false,beating=false,destroyed=false,nextAt=0,epoch=null,statusNow='idle',chain=Promise.resolve();
+  let stateH=null,logsDir=null,pdir=null,logH=null,timer=null,hbT=null,intervalMin=Math.max(0.05,parseFloat(cfg.checkMin)||3),paused=false,busy=false,inStep=false,aborted=false,resetSeen=false,beating=false,destroyed=false,nextAt=0,epoch=null,statusNow='idle',chain=Promise.resolve();
   const opened=[];                                            /* windows this panel opened, with the globals the functions created */
 
   const root=mk('div','position:fixed;right:16px;bottom:16px;z-index:2147483647;width:330px;background:#1c1917;color:#fafaf9;border:1px solid #57534e;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);font:13px/1.45 system-ui,sans-serif;padding:12px');
@@ -121,15 +122,16 @@ function panelMain(cfg,fmt,FN){
 
   const setStatus=t=>{status.textContent=t;};
   const note=t=>{mini.textContent+=new Date().toLocaleTimeString()+'  '+t+'\n';if(mini.textContent.length>6000)mini.textContent=mini.textContent.slice(-4000);mini.scrollTop=mini.scrollHeight;};
-  const write=async(h,t)=>{const w=await h.createWritable();await w.write(t);await w.close();};
-  const readS=async()=>JSON.parse(await(await stateH.getFile()).text());
-  const log=t=>{const h=logH;chain=chain.then(async()=>{if(!h)return;const f=await h.getFile(),w=await h.createWritable({keepExistingData:true});await w.seek(f.size);await w.write(t);await w.close();}).catch(e=>note('log write failed: '+e.message));return chain;};
+  const io=(p,ms)=>{let t;return Promise.race([p,new Promise((_,j)=>{t=setTimeout(()=>j(new Error('file access timed out')),ms||20000);})]).finally(()=>clearTimeout(t));};
+  const write=(h,t)=>io((async()=>{const w=await h.createWritable();await w.write(t);await w.close();})());
+  const readS=()=>io((async()=>JSON.parse(await(await stateH.getFile()).text()))());
+  const log=t=>{const h=logH;chain=chain.then(()=>h?io((async()=>{const f=await h.getFile(),w=await h.createWritable({keepExistingData:true});await w.seek(f.size);await w.write(t);await w.close();})()):0).catch(e=>note('log write failed: '+e.message));return chain;};
   const nextText=i=>cfg.flat[i]?'Next execution is '+cfg.flat[i].f+' on '+cfg.flat[i].u:'That was the last execution';
 
   /* heartbeat: its own timer, so the runner still sees this panel while a long step is running */
-  async function beat(){
+  async function beat(st){
     if(!pdir||beating||destroyed)return;beating=true;
-    try{await write(await pdir.getFileHandle(hbName,{create:true}),JSON.stringify({origin:location.origin,seen:new Date().toISOString(),everyMin:intervalMin,status:statusNow,runId:cfg.runId}));}catch(e){}
+    try{await write(await io(pdir.getFileHandle(hbName,{create:true})),JSON.stringify({origin:location.origin,seen:new Date().toISOString(),everyMin:intervalMin,status:st||statusNow,runId:cfg.runId}));}catch(e){}
     beating=false;
   }
   /* Reset support: the runner bumps state.epoch; we notice, stop what we are doing and drop everything we kept */
@@ -156,7 +158,7 @@ function panelMain(cfg,fmt,FN){
   async function runFn(w,fn){
     const act=new Set(),doc=w.document,oc=w.console.log;
     const ow=canAttr?{st:w.setTimeout,ct:w.clearTimeout,ft:w.fetch,xs:w.XMLHttpRequest.prototype.send,raf:w.requestAnimationFrame,caf:w.cancelAnimationFrame}:null;
-    const mine=()=>{const L=(new Error().stack||'').split('\n');for(let i=0;i<L.length;i++)if(L[i].indexOf('__rtw')>-1)return(L[i+1]||'').indexOf(MARK)>-1;return false;};
+    const mine=()=>{const lim=Error.stackTraceLimit;Error.stackTraceLimit=5;let s='';try{s=new Error().stack||'';}finally{Error.stackTraceLimit=lim;}const L=s.split('\n');for(let i=0;i<L.length;i++)if(L[i].indexOf('__rtw')>-1)return(L[i+1]||'').indexOf(MARK)>-1;return false;};
     w.console.log=(...a)=>console.log('   >',...a);
     if(ow){
       w.setTimeout=function __rtw(cb,ms,...a){if(typeof cb!=='function'||!mine())return ow.st.call(w,cb,ms,...a);let id;id=ow.st.call(w,function(...x){act.delete('t'+id);return cb.apply(this,x);},ms,...a);act.add('t'+id);return id;};
@@ -223,7 +225,7 @@ function panelMain(cfg,fmt,FN){
           if(Date.now()-t0>60000)throw new Error('page load timeout');
         }
         await sleep(cfg.waitMs);
-        rec={w,base:new Set(Object.getOwnPropertyNames(w)),junk:new Set()};opened.push(rec);
+        rec={w,base:new Set(Object.getOwnPropertyNames(w).filter(k=>k.indexOf('__')===0)),junk:new Set()};opened.push(rec);
         await log(fmt('info','Page loaded · running '+own.fns.length+' function(s)'));
       }catch(e){
         badc=own.fns.length;
@@ -232,6 +234,7 @@ function panelMain(cfg,fmt,FN){
       }
       for(let i=0;i<own.fns.length;i++){
         if(aborted)return null;
+        if(w.closed){const left=own.fns.length-i;badc+=left;await log(fmt('err','The page was closed, so '+left+' function(s) were skipped')+fmt('next',nextText(own.base+own.fns.length)));return await advance(own.k,okc,badc);}
         const f=own.fns[i],t1=Date.now();let line,hid=false;
         try{hid=w.document.hidden;}catch(e){}
         statusNow='running '+f.name;
@@ -246,7 +249,10 @@ function panelMain(cfg,fmt,FN){
         await log(line+(aborted?'':fmt('next',nextText(own.base+i+1))));
       }
       return aborted?null:await advance(own.k,okc,badc);
-    }finally{inStep=false;}
+    }finally{
+      inStep=false;
+      if(!cfg.keepOpen&&w){await sleep(2000);try{w.close();}catch(e){}if(rec){const i=opened.indexOf(rec);if(i>-1)opened.splice(i,1);}}
+    }
   }
   async function tick(){
     if(busy||!stateH||destroyed)return;busy=true;clearTimeout(timer);
@@ -286,7 +292,8 @@ function panelMain(cfg,fmt,FN){
   bNow.onclick=()=>tick();
   bPause.onclick=()=>{paused=!paused;bPause.textContent=paused?'Resume':'Pause';if(paused){clearTimeout(timer);statusNow='paused';beat();}else tick();};
   const cdT=setInterval(()=>{const m=Math.max(0,nextAt-Date.now());cd.textContent=busy?'Working…':paused?'Paused':stateH?'Next check in '+Math.floor(m/60000)+':'+p2(Math.floor(m%60000/1000)):'';},1000);
-  function destroy(){destroyed=true;clearTimeout(timer);clearInterval(hbT);clearInterval(cdT);cleanup();if(pdir)pdir.removeEntry(hbName).catch(()=>{});root.remove();delete window.__runnerPanel;}
+  function destroy(){destroyed=true;window.removeEventListener('pagehide',onHide);clearTimeout(timer);clearInterval(hbT);clearInterval(cdT);cleanup();if(pdir)pdir.removeEntry(hbName).catch(()=>{});root.remove();delete window.__runnerPanel;}
+  const onHide=()=>{beat('page closed');};window.addEventListener('pagehide',onHide);
   bX.onclick=destroy;window.__runnerPanel={destroy};
   console.log('%c[runner] panel ready on '+location.origin+' · owns steps '+cfg.steps.map(s=>s.k).join(', '),'color:#16a34a;font-weight:bold');
 }
@@ -366,10 +373,10 @@ $('gen').onclick=async()=>{
   const d=new Date(),runId=d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+'_'+p2(d.getHours())+'-'+p2(d.getMinutes())+'-'+p2(d.getSeconds());
   const flat=[];let base=0;
   steps.forEach((s,i)=>{s.k=i+1;s.base=base;base+=s.fns.length;s.fns.forEach(f=>flat.push({u:s.urlName,f:f.name}));});
-  STATE={runId,value:0,total:steps.length,ok:0,bad:0,startedAt:null,epoch:0,logName:logNameOf(runId,0),plan:steps.map(s=>({urlName:s.urlName,fns:s.fnNames}))};
+  STATE={runId,value:0,total:steps.length,ok:0,bad:0,startedAt:null,epoch:0,logName:logNameOf(runId,0),plan:steps.map(s=>({urlName:s.urlName,origin:s.origin,fns:s.fnNames}))};
   try{await writeState(STATE);}catch(e){msg('Could not write state.json: '+e.message);return;}
   lastLog='';$('log').replaceChildren();renderState();
-  const base0={waitMs:Math.max(0,parseInt($('wait').value,10)||0),asWindow:$('openas').value==='window',settleMs:Math.max(0,parseInt($('settle').value,10)||0),limitMs:Math.max(1,parseFloat($('limit').value)||10)*60000};
+  const base0={checkMin:Math.max(0.05,parseFloat($('every').value)||3),keepOpen:$('after').value==='keep',waitMs:Math.max(0,parseInt($('wait').value,10)||0),asWindow:$('openas').value==='window',settleMs:Math.max(0,parseInt($('settle').value,10)||0),limitMs:Math.max(1,parseFloat($('limit').value)||10)*60000};
   const by={};
   steps.forEach(s=>(by[s.origin]=by[s.origin]||[]).push({k:s.k,base:s.base,urlName:s.urlName,url:s.url,fns:s.fns.map(f=>({name:f.name}))}));
   chips={};const box=$('panels');box.replaceChildren();
@@ -445,24 +452,37 @@ function renderLog(t){
   addLines(box,inc?t.slice(lastLog.length):t);
   lastLog=t;box.scrollTop=box.scrollHeight;
 }
+function stallCheck(hb){
+  const s=STATE;let t='';
+  if(s&&s.value>=1&&s.value<=s.total&&s.plan&&s.plan[s.value-1]&&s.plan[s.value-1].origin){
+    const o=s.plan[s.value-1].origin,b=hb[o],age=(Date.now()-(Date.parse(s.updated)||s.startedAt||Date.now()))/1000;
+    if(b&&b.status==='page closed')t='The page running the panel for '+o+' was closed or reloaded, so step '+s.value+' is waiting. ';
+    else if(b&&b.ago>150)t='The panel for '+o+' (step '+s.value+') has not checked in for '+Math.round(b.ago)+' s. ';
+    else if(!b&&age>180)t='No panel for '+o+' has checked in, and step '+s.value+' is waiting. ';
+    if(t)t+='Its tab may have crashed (for example “Out of memory”) or been reloaded: open the site, paste its script again and select the folder. The step then restarts from its beginning.';
+  }
+  $('stall').textContent=t;
+}
 async function poll(){
   if(!dirHandle||polling)return;polling=true;
   try{
     try{STATE=await readState();renderState();}catch(e){return;}
+    const hb={};
     try{
       const pd=await dirHandle.getDirectoryHandle('panels');
       for(const[o,chip]of Object.entries(chips)){
         try{
           const b=JSON.parse(await getText(await pd.getFileHandle(hbFile(o))));
-          const ago=(Date.now()-new Date(b.seen))/1000,ok=ago<150;
+          const ago=(Date.now()-new Date(b.seen))/1000,ok=ago<150;hb[o]={ago,status:b.status};
           chip.textContent=(ok?'● panel online · ':'○ panel quiet · ')+(b.status||'')+' · seen '+Math.round(ago)+' s ago · checks every '+b.everyMin+' min';chip.className='chip '+(ok?'on':'off');
         }catch(e){}
       }
     }catch(e){}
+    stallCheck(hb);
     try{const t=await getText(await(await dirHandle.getDirectoryHandle('logs')).getFileHandle(STATE.logName));if(t!==lastLog)renderLog(t);}catch(e){}
   }finally{polling=false;}
 }
-setInterval(poll,2000);
+(function loop(){poll().finally(()=>setTimeout(loop,document.hidden?10000:2000));})();
 refresh();renderState();
 </script>
 </body>
